@@ -13,11 +13,13 @@ from ..config import DEFAULT_FEEDS
 from ..database import (
     article_exists_with_hash,
     fetch_unenriched,
+    fetch_unscored,
     get_article_feedback_score,
     get_preferences,
     insert_article,
     recent_titles,
     update_article_enrichment,
+    update_article_score_only,
 )
 from .scoring import score_article
 from .summarizer import summarize_article
@@ -124,11 +126,12 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
 
 
 def enrich_unprocessed_articles() -> int:
+    """Generate summaries for new articles, then score anything unscored."""
     preferences = get_preferences()
-    rows = fetch_unenriched(limit=300)
     count = 0
 
-    for row in rows:
+    # Step 1: summarise articles that have no summary yet
+    for row in fetch_unenriched(limit=300):
         base_score, topics, breakdown_items = score_article(
             title=row["title"],
             content=row["content"] or "",
@@ -140,13 +143,33 @@ def enrich_unprocessed_articles() -> int:
         total_score = round(base_score + feedback_score, 2)
         summary = summarize_article(row["title"], row["content"] or "")
         update_article_enrichment(
-            row["id"],
-            base_score,
-            total_score,
-            topics,
-            summary,
-            {"items": breakdown_items},
+            row["id"], base_score, total_score, topics, summary, {"items": breakdown_items}
         )
         count += 1
 
+    # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
+    count += rescore_all(preferences)
+    return count
+
+
+def rescore_all(preferences: dict | None = None) -> int:
+    """Re-score ALL articles that have base_score=0 (after a reset). No summarisation."""
+    if preferences is None:
+        preferences = get_preferences()
+    rows = fetch_unscored(limit=5000)
+    count = 0
+    for row in rows:
+        base_score, topics, breakdown_items = score_article(
+            title=row["title"],
+            content=row["content"] or "",
+            source=row["source"],
+            published_at=row["published_at"],
+            preferences=preferences,
+        )
+        feedback_score = get_article_feedback_score(row["id"])
+        total_score = round(base_score + feedback_score, 2)
+        update_article_score_only(
+            row["id"], base_score, total_score, topics, {"items": breakdown_items}
+        )
+        count += 1
     return count

@@ -119,8 +119,8 @@ function App() {
 
   // Poll backend until reenrich is done, then reload briefing.
   async function pollReenrich() {
-    const INTERVAL = 1500
-    const MAX_WAIT = 120_000
+    const INTERVAL = 800
+    const MAX_WAIT = 60_000
     const start = Date.now()
     while (Date.now() - start < MAX_WAIT) {
       await new Promise((r) => setTimeout(r, INTERVAL))

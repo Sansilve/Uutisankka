@@ -30,7 +30,7 @@ from .models import (
     ScoreBreakdownPayload,
     SummaryPayload,
 )
-from .services.ingest import enrich_unprocessed_articles, ingest_feeds
+from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all
 
 import threading
 
@@ -99,8 +99,8 @@ def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTa
 def _reenrich_all() -> None:
     global _reenrich_status
     _reenrich_status = {"state": "running", "enriched": 0}
-    reset_all_enrichment()
-    enriched = enrich_unprocessed_articles()
+    reset_all_enrichment()          # clears scores only — summaries preserved
+    enriched = rescore_all()        # pure scoring, no LLM calls
     _reenrich_status = {"state": "done", "enriched": enriched}
 
 

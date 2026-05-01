@@ -217,16 +217,34 @@ def recent_titles(limit: int = 250) -> list[str]:
 
 
 def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
+    """Articles that still need a summary generated."""
     conn = _conn()
     try:
         rows = conn.execute(
             """
             SELECT id, title, source, published_at, content, url
             FROM articles
-            WHERE
-                summary_json = '{"bullets": []}'
-                OR score_breakdown_json = '{"items": []}'
-                OR base_score = 0
+            WHERE summary_json = '{"bullets": []}'
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return rows
+    finally:
+        conn.close()
+
+
+def fetch_unscored(limit: int = 2000) -> list[sqlite3.Row]:
+    """Articles that have a summary but need (re-)scoring."""
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, title, source, published_at, content, url
+            FROM articles
+            WHERE base_score = 0
+              AND summary_json != '{"bullets": []}'
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -238,7 +256,7 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
 
 
 def reset_all_enrichment() -> int:
-    """Reset scoring/topic/summary fields on ALL articles so they get re-enriched.
+    """Reset ONLY scoring fields on all articles — summaries are preserved.
     Returns the number of rows reset."""
     with _db_lock:
         conn = _conn()
@@ -249,8 +267,7 @@ def reset_all_enrichment() -> int:
                 SET base_score = 0,
                     score = 0,
                     topics = '[]',
-                    score_breakdown_json = '{"items": []}',
-                    summary_json = '{"bullets": []}'
+                    score_breakdown_json = '{"items": []}'
                 """
             )
             conn.commit()
@@ -295,6 +312,36 @@ def update_article_enrichment(
                     total_score,
                     json.dumps(topics),
                     json.dumps(summary),
+                    json.dumps(score_breakdown),
+                    article_id,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def update_article_score_only(
+    article_id: int,
+    base_score: float,
+    total_score: float,
+    topics: list[str],
+    score_breakdown: dict[str, Any],
+) -> None:
+    """Update score/topics/breakdown without touching the summary."""
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.execute(
+                """
+                UPDATE articles
+                SET base_score = ?, score = ?, topics = ?, score_breakdown_json = ?
+                WHERE id = ?
+                """,
+                (
+                    base_score,
+                    total_score,
+                    json.dumps(topics),
                     json.dumps(score_breakdown),
                     article_id,
                 ),
@@ -396,6 +443,9 @@ def top_briefing(limit: int = 10) -> list[sqlite3.Row]:
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
             LEFT JOIN article_feedback f ON f.article_id = a.id
+            WHERE a.score > 0
+              AND (a.published_at IS NULL
+                   OR datetime(a.published_at) >= datetime('now', '-48 hours'))
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,
