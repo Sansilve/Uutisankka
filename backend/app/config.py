@@ -1,7 +1,18 @@
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env from backend/ directory if present
+load_dotenv(BASE_DIR / ".env")
+
 DB_PATH = BASE_DIR / "news.db"
+
+# LLM settings (OpenAI)
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 DEFAULT_FEEDS = [
     # Finland: public service and major general news
