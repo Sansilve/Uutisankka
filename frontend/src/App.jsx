@@ -52,6 +52,7 @@ function App() {
   })
   const [activeTab, setActiveTab] = useState('top')
   const [status, setStatus] = useState('Ladataan...')
+  const [unsaved, setUnsaved] = useState(false)
   const [metrics, setMetrics] = useState({
     top_limit: 10,
     total_feedback_votes: 0,
@@ -112,19 +113,21 @@ function App() {
       next.add(id)
     }
     setFn(next)
+    setUnsaved(true)
   }
 
   async function savePreferences() {
     setBusy(true)
+    setStatus('Tallennetaan ja pisteytetään uudelleen...')
     try {
       const payload = {
         interests: [...selectedCategories],
         disliked_topics: [...dislikedCategories],
       }
-      const updated = await updatePreferences(payload)
-      setPreferences(updated)
+      await updatePreferences(payload)
+      setUnsaved(false)
       await loadAll()
-      setStatus('Asetukset tallennettu ja uutiset järjestetty uudelleen')
+      setStatus('Asetukset tallennettu – uutiset pisteytetty uudelleen')
     } catch (error) {
       setStatus(`Virhe: ${error.message}`)
       setBusy(false)
@@ -248,6 +251,12 @@ function App() {
       <section className="panel prefs">
         <h2>Mukauta</h2>
 
+        {unsaved && (
+          <div className="unsaved-banner">
+            Tallentamattomat muutokset – klikkaa Tallenna niin uutiset päivittyvät.
+          </div>
+        )}
+
         <div className="pref-row">
           <p className="pref-label">Kiinnostaa</p>
           <div className="cat-chips">
@@ -294,7 +303,13 @@ function App() {
         </div>
 
         <div className="prefs-actions">
-          <button onClick={savePreferences} disabled={busy}>Tallenna asetukset</button>
+          <button
+            onClick={savePreferences}
+            disabled={busy}
+            className={unsaved ? 'btn-primary' : ''}
+          >
+            {busy ? 'Käsitellään...' : 'Tallenna asetukset'}
+          </button>
           <span>{status}</span>
         </div>
       </section>

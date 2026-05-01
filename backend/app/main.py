@@ -88,9 +88,10 @@ def read_preferences() -> PreferenceProfile:
 @app.put("/api/preferences", response_model=PreferenceProfile)
 def update_preferences(payload: PreferenceUpdate) -> PreferenceProfile:
     upsert_preferences(payload.interests, payload.disliked_topics)
-    refreshed = ingest_feeds()
-    if refreshed["inserted"] == 0:
-        enrich_unprocessed_articles()
+    # Re-score ALL existing articles with the new preference weights.
+    # Simply calling enrich_unprocessed_articles() would skip already-scored articles.
+    reset_all_enrichment()
+    enrich_unprocessed_articles()
     return PreferenceProfile(**get_preferences())
 
 
@@ -141,8 +142,8 @@ def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> Briefing
 def admin_reenrich() -> dict[str, int]:
     """Reset all article scoring data and re-enrich with current scoring rules."""
     reset_count = reset_all_enrichment()
-    enriched = enrich_unprocessed_articles()
-    return {"reset": reset_count, "enriched": enriched["enriched"]}
+    enriched = enrich_unprocessed_articles()  # returns int
+    return {"reset": reset_count, "enriched": enriched}
 
 
 @app.post("/api/feedback", response_model=FeedbackResponse)
