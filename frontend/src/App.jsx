@@ -119,11 +119,14 @@ function App() {
 
   // Poll backend until reenrich is done, then reload briefing.
   async function pollReenrich() {
-    const INTERVAL = 800
+    const FIRST_DELAY = 100   // tarkista heti 100ms jälkeen
+    const INTERVAL = 300      // sen jälkeen 300ms välein
     const MAX_WAIT = 60_000
     const start = Date.now()
+    let firstCheck = true
     while (Date.now() - start < MAX_WAIT) {
-      await new Promise((r) => setTimeout(r, INTERVAL))
+      await new Promise((r) => setTimeout(r, firstCheck ? FIRST_DELAY : INTERVAL))
+      firstCheck = false
       try {
         const s = await fetchReenrichStatus()
         const done = s.state === 'done'
