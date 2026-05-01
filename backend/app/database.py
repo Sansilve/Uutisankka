@@ -1,0 +1,387 @@
+import json
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+from threading import Lock
+from typing import Any
+
+from .config import DB_PATH
+
+_db_lock = Lock()
+
+
+def _conn() -> sqlite3.Connection:
+    db_path = Path(DB_PATH)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    existing = {row[1] for row in rows}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def init_db() -> None:
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS articles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    published_at TEXT,
+                    content TEXT,
+                    url TEXT NOT NULL UNIQUE,
+                    content_hash TEXT NOT NULL,
+                    base_score REAL DEFAULT 0,
+                    feedback_score REAL DEFAULT 0,
+                    score REAL DEFAULT 0,
+                    topics TEXT DEFAULT '[]',
+                    score_breakdown_json TEXT DEFAULT '{"items": []}',
+                    summary_json TEXT DEFAULT '{"bullets": []}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_articles_published ON articles (published_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_articles_score ON articles (score DESC);
+                CREATE INDEX IF NOT EXISTS idx_articles_hash ON articles (content_hash);
+
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    user_id INTEGER PRIMARY KEY CHECK (user_id = 1),
+                    interests TEXT NOT NULL,
+                    disliked_topics TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS article_feedback (
+                    article_id INTEGER PRIMARY KEY,
+                    positive_count INTEGER NOT NULL DEFAULT 0,
+                    negative_count INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+                );
+                """
+            )
+            _ensure_column(conn, "articles", "base_score", "REAL DEFAULT 0")
+            _ensure_column(conn, "articles", "feedback_score", "REAL DEFAULT 0")
+            _ensure_column(conn, "articles", "score_breakdown_json", "TEXT DEFAULT '{\"items\": []}'")
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def ensure_default_preferences() -> None:
+    default_interests = ["technology", "politics", "economy"]
+    default_dislikes = ["celebrity", "entertainment"]
+    upsert_preferences(default_interests, default_dislikes, only_if_missing=True)
+
+
+def upsert_preferences(
+    interests: list[str], disliked_topics: list[str], only_if_missing: bool = False
+) -> None:
+    with _db_lock:
+        conn = _conn()
+        try:
+            existing = conn.execute(
+                "SELECT user_id FROM user_preferences WHERE user_id = 1"
+            ).fetchone()
+            if existing and only_if_missing:
+                return
+
+            payload = (
+                json.dumps(interests),
+                json.dumps(disliked_topics),
+                datetime.utcnow().isoformat(),
+            )
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE user_preferences
+                    SET interests = ?, disliked_topics = ?, updated_at = ?
+                    WHERE user_id = 1
+                    """,
+                    payload,
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO user_preferences (user_id, interests, disliked_topics, updated_at)
+                    VALUES (1, ?, ?, ?)
+                    """,
+                    payload,
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def get_preferences() -> dict[str, list[str]]:
+    conn = _conn()
+    try:
+        row = conn.execute(
+            "SELECT interests, disliked_topics FROM user_preferences WHERE user_id = 1"
+        ).fetchone()
+        if not row:
+            return {
+                "interests": ["technology", "politics", "economy"],
+                "disliked_topics": ["celebrity", "entertainment"],
+            }
+        return {
+            "interests": json.loads(row["interests"]),
+            "disliked_topics": json.loads(row["disliked_topics"]),
+        }
+    finally:
+        conn.close()
+
+
+def insert_article(article: dict[str, Any]) -> bool:
+    with _db_lock:
+        conn = _conn()
+        try:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO articles (title, source, published_at, content, url, content_hash)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    article["title"],
+                    article["source"],
+                    article["published_at"],
+                    article["content"],
+                    article["url"],
+                    article["content_hash"],
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount == 1
+        finally:
+            conn.close()
+
+
+def article_exists_with_hash(content_hash: str, limit_hours: int = 96) -> bool:
+    conn = _conn()
+    try:
+        row = conn.execute(
+            """
+            SELECT id FROM articles
+            WHERE content_hash = ?
+            AND datetime(created_at) >= datetime('now', ?)
+            LIMIT 1
+            """,
+            (content_hash, f"-{limit_hours} hours"),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def recent_titles(limit: int = 250) -> list[str]:
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            "SELECT title FROM articles ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [r["title"] for r in rows]
+    finally:
+        conn.close()
+
+
+def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, title, source, published_at, content, url
+            FROM articles
+            WHERE
+                summary_json = '{"bullets": []}'
+                OR score_breakdown_json = '{"items": []}'
+                OR base_score = 0
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return rows
+    finally:
+        conn.close()
+
+
+def get_article_feedback_score(article_id: int) -> float:
+    conn = _conn()
+    try:
+        row = conn.execute(
+            "SELECT feedback_score FROM articles WHERE id = ?",
+            (article_id,),
+        ).fetchone()
+        if not row:
+            return 0.0
+        return float(row["feedback_score"] or 0.0)
+    finally:
+        conn.close()
+
+
+def update_article_enrichment(
+    article_id: int,
+    base_score: float,
+    total_score: float,
+    topics: list[str],
+    summary: dict[str, Any],
+    score_breakdown: dict[str, Any],
+) -> None:
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.execute(
+                """
+                UPDATE articles
+                SET base_score = ?, score = ?, topics = ?, summary_json = ?, score_breakdown_json = ?
+                WHERE id = ?
+                """,
+                (
+                    base_score,
+                    total_score,
+                    json.dumps(topics),
+                    json.dumps(summary),
+                    json.dumps(score_breakdown),
+                    article_id,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]:
+    with _db_lock:
+        conn = _conn()
+        try:
+            row = conn.execute(
+                """
+                SELECT positive_count, negative_count
+                FROM article_feedback
+                WHERE article_id = ?
+                """,
+                (article_id,),
+            ).fetchone()
+
+            positive = int(row["positive_count"]) if row else 0
+            negative = int(row["negative_count"]) if row else 0
+
+            if is_relevant:
+                positive += 1
+            else:
+                negative += 1
+
+            timestamp = datetime.utcnow().isoformat()
+            if row:
+                conn.execute(
+                    """
+                    UPDATE article_feedback
+                    SET positive_count = ?, negative_count = ?, updated_at = ?
+                    WHERE article_id = ?
+                    """,
+                    (positive, negative, timestamp, article_id),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO article_feedback (article_id, positive_count, negative_count, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (article_id, positive, negative, timestamp),
+                )
+
+            net_votes = positive - negative
+            feedback_score = round(max(-4.0, min(4.0, net_votes * 0.8)), 2)
+
+            article = conn.execute(
+                "SELECT base_score FROM articles WHERE id = ?",
+                (article_id,),
+            ).fetchone()
+            base_score = float(article["base_score"] or 0.0) if article else 0.0
+            total_score = round(base_score + feedback_score, 2)
+
+            conn.execute(
+                """
+                UPDATE articles
+                SET feedback_score = ?, score = ?
+                WHERE id = ?
+                """,
+                (feedback_score, total_score, article_id),
+            )
+            conn.commit()
+
+            return {
+                "article_id": article_id,
+                "feedback_positive": positive,
+                "feedback_negative": negative,
+                "feedback_score": feedback_score,
+                "total_score": total_score,
+            }
+        finally:
+            conn.close()
+
+
+def top_briefing(limit: int = 10) -> list[sqlite3.Row]:
+    conn = _conn()
+    try:
+        return conn.execute(
+            """
+            SELECT
+                a.id,
+                a.title,
+                a.source,
+                a.published_at,
+                a.url,
+                a.score,
+                a.base_score,
+                a.feedback_score,
+                a.topics,
+                a.summary_json,
+                a.score_breakdown_json,
+                COALESCE(f.positive_count, 0) AS feedback_positive,
+                COALESCE(f.negative_count, 0) AS feedback_negative
+            FROM articles a
+            LEFT JOIN article_feedback f ON f.article_id = a.id
+            ORDER BY a.score DESC, datetime(a.published_at) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def top_feedback_metrics(limit: int = 10) -> dict[str, float | int | None]:
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                COALESCE(f.positive_count, 0) AS positive_count,
+                COALESCE(f.negative_count, 0) AS negative_count
+            FROM articles a
+            LEFT JOIN article_feedback f ON f.article_id = a.id
+            ORDER BY a.score DESC, datetime(a.published_at) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+        total_positive = sum(int(row["positive_count"]) for row in rows)
+        total_negative = sum(int(row["negative_count"]) for row in rows)
+        total_votes = total_positive + total_negative
+        ratio = round(total_positive / total_votes, 3) if total_votes else None
+        return {
+            "top_limit": limit,
+            "total_feedback_votes": total_votes,
+            "positive_feedback_ratio": ratio,
+        }
+    finally:
+        conn.close()

@@ -1,0 +1,75 @@
+from datetime import datetime
+from typing import List
+
+from pydantic import BaseModel, Field
+
+
+class PreferenceProfile(BaseModel):
+    interests: List[str] = Field(default_factory=lambda: ["technology", "politics", "economy"])
+    disliked_topics: List[str] = Field(default_factory=lambda: ["celebrity", "entertainment"])
+
+
+class PreferenceUpdate(BaseModel):
+    interests: List[str]
+    disliked_topics: List[str]
+
+
+class SummaryPayload(BaseModel):
+    bullets: List[str]
+
+
+class ScoreBreakdownItem(BaseModel):
+    reason: str
+    points: float
+
+
+class ScoreBreakdownPayload(BaseModel):
+    items: List[ScoreBreakdownItem] = Field(default_factory=list)
+
+
+class ArticleBrief(BaseModel):
+    id: int
+    title: str
+    source: str
+    published_at: datetime | None
+    url: str
+    score: float
+    base_score: float
+    feedback_score: float
+    feedback_positive: int
+    feedback_negative: int
+    topics: List[str]
+    summary: SummaryPayload
+    score_breakdown: ScoreBreakdownPayload
+
+
+class IngestResponse(BaseModel):
+    fetched: int
+    inserted: int
+    duplicates: int
+    enriched: int
+
+
+class BriefingResponse(BaseModel):
+    generated_at: datetime
+    total: int
+    stories: List[ArticleBrief]
+
+
+class FeedbackPayload(BaseModel):
+    article_id: int
+    is_relevant: bool
+
+
+class FeedbackResponse(BaseModel):
+    article_id: int
+    feedback_positive: int
+    feedback_negative: int
+    feedback_score: float
+    total_score: float
+
+
+class MetricsResponse(BaseModel):
+    top_limit: int
+    total_feedback_votes: int
+    positive_feedback_ratio: float | None

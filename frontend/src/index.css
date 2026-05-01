@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap');
+
+:root {
+  --bg: #f7f2e8;
+  --paper: #fffdf8;
+  --ink: #1d2a35;
+  --muted: #4f5f69;
+  --line: #d6cfc2;
+  --accent: #0d6f6f;
+  --accent-soft: #d6ece7;
+  --danger-soft: #f4dfd8;
+  --shadow: 0 12px 30px rgba(29, 42, 53, 0.08);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Manrope', sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 100% 0, #efe4cc 0%, transparent 36%),
+    radial-gradient(circle at 0 100%, #d6ece7 0%, transparent 32%),
+    var(--bg);
+}
+
+#root {
+  min-height: 100vh;
+}
