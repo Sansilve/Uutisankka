@@ -235,13 +235,13 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
         conn.close()
 
 
-def fetch_unscored(limit: int = 2000) -> list[sqlite3.Row]:
-    """Articles that have a summary but need (re-)scoring."""
+def fetch_unscored(limit: int = 5000) -> list[sqlite3.Row]:
+    """Articles that have a summary but need (re-)scoring. Excludes heavy content column."""
     conn = _conn()
     try:
         rows = conn.execute(
             """
-            SELECT id, title, source, published_at, content, url
+            SELECT id, title, source, published_at, content
             FROM articles
             WHERE base_score = 0
               AND summary_json != '{"bullets": []}'
@@ -253,6 +253,38 @@ def fetch_unscored(limit: int = 2000) -> list[sqlite3.Row]:
         return rows
     finally:
         conn.close()
+
+
+def batch_fetch_feedback_scores() -> dict[int, float]:
+    """Return {article_id: feedback_score} for all articles in one query."""
+    conn = _conn()
+    try:
+        rows = conn.execute("SELECT id, feedback_score FROM articles").fetchall()
+        return {row["id"]: float(row["feedback_score"] or 0.0) for row in rows}
+    finally:
+        conn.close()
+
+
+def batch_update_scores(updates: list[tuple]) -> int:
+    """Write (base_score, score, topics_json, breakdown_json, id) rows in a single transaction.
+    Returns number of rows updated."""
+    if not updates:
+        return 0
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.executemany(
+                """
+                UPDATE articles
+                SET base_score = ?, score = ?, topics = ?, score_breakdown_json = ?
+                WHERE id = ?
+                """,
+                updates,
+            )
+            conn.commit()
+            return len(updates)
+        finally:
+            conn.close()
 
 
 def reset_all_enrichment() -> int:

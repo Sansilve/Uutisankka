@@ -1,5 +1,6 @@
 import hashlib
 import html
+import json
 import re
 from datetime import timezone
 from difflib import SequenceMatcher
@@ -12,6 +13,8 @@ import feedparser
 from ..config import DEFAULT_FEEDS
 from ..database import (
     article_exists_with_hash,
+    batch_fetch_feedback_scores,
+    batch_update_scores,
     fetch_unenriched,
     fetch_unscored,
     get_article_feedback_score,
@@ -153,11 +156,18 @@ def enrich_unprocessed_articles() -> int:
 
 
 def rescore_all(preferences: dict | None = None) -> int:
-    """Re-score ALL articles that have base_score=0 (after a reset). No summarisation."""
+    """Re-score all articles with base_score=0. Pure Python scoring, no LLM, single DB transaction."""
     if preferences is None:
         preferences = get_preferences()
     rows = fetch_unscored(limit=5000)
-    count = 0
+    if not rows:
+        return 0
+
+    # Fetch all feedback scores in ONE query instead of one per article
+    feedback_scores = batch_fetch_feedback_scores()
+
+    # Score all articles in memory
+    updates: list[tuple] = []
     for row in rows:
         base_score, topics, breakdown_items = score_article(
             title=row["title"],
@@ -166,10 +176,15 @@ def rescore_all(preferences: dict | None = None) -> int:
             published_at=row["published_at"],
             preferences=preferences,
         )
-        feedback_score = get_article_feedback_score(row["id"])
+        feedback_score = feedback_scores.get(row["id"], 0.0)
         total_score = round(base_score + feedback_score, 2)
-        update_article_score_only(
-            row["id"], base_score, total_score, topics, {"items": breakdown_items}
-        )
-        count += 1
-    return count
+        updates.append((
+            base_score,
+            total_score,
+            json.dumps(topics),
+            json.dumps({"items": breakdown_items}),
+            row["id"],
+        ))
+
+    # Write everything in a single transaction
+    return batch_update_scores(updates)
