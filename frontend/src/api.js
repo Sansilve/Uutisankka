@@ -21,6 +21,10 @@ export function fetchBriefing(limit = 10) {
   return request(`/api/briefing?limit=${limit}`)
 }
 
+export function fetchRandomBriefing(limit = 10) {
+  return request(`/api/briefing/random?limit=${limit}`)
+}
+
 export function triggerIngest() {
   return request('/api/ingest', { method: 'POST' })
 }

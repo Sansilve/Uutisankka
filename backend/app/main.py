@@ -12,6 +12,7 @@ from .database import (
     ensure_default_preferences,
     get_preferences,
     init_db,
+    random_briefing,
     top_briefing,
     top_feedback_metrics,
     upsert_preferences,
@@ -92,11 +93,8 @@ def update_preferences(payload: PreferenceUpdate) -> PreferenceProfile:
     return PreferenceProfile(**get_preferences())
 
 
-@app.get("/api/briefing", response_model=BriefingResponse)
-def get_briefing(limit: int = Query(default=10, ge=1, le=20)) -> BriefingResponse:
-    rows = top_briefing(limit)
+def _rows_to_briefing(rows) -> BriefingResponse:
     stories: list[ArticleBrief] = []
-
     for row in rows:
         summary = json.loads(row["summary_json"]) if row["summary_json"] else {"bullets": []}
         topics = json.loads(row["topics"]) if row["topics"] else []
@@ -122,8 +120,20 @@ def get_briefing(limit: int = Query(default=10, ge=1, le=20)) -> BriefingRespons
                 score_breakdown=ScoreBreakdownPayload(**score_breakdown),
             )
         )
-
     return BriefingResponse(generated_at=datetime.utcnow(), total=len(stories), stories=stories)
+
+
+@app.get("/api/briefing", response_model=BriefingResponse)
+def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
+    rows = top_briefing(limit)
+    stories: list[ArticleBrief] = []
+
+    return _rows_to_briefing(top_briefing(limit))
+
+
+@app.get("/api/briefing/random", response_model=BriefingResponse)
+def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
+    return _rows_to_briefing(random_briefing(limit))
 
 
 @app.post("/api/feedback", response_model=FeedbackResponse)

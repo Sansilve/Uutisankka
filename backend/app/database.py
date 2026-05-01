@@ -139,6 +139,31 @@ def get_preferences() -> dict[str, list[str]]:
         conn.close()
 
 
+def random_briefing(limit: int = 10) -> list:
+    """Return *limit* random enriched articles (score > 0), shuffled each call."""
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                a.id, a.title, a.source, a.published_at, a.url,
+                a.score, a.base_score, a.feedback_score,
+                a.topics, a.summary_json, a.score_breakdown_json,
+                COALESCE(f.positive_count, 0) AS feedback_positive,
+                COALESCE(f.negative_count, 0) AS feedback_negative
+            FROM articles a
+            LEFT JOIN article_feedback f ON f.article_id = a.id
+            WHERE a.score > 0
+            ORDER BY RANDOM()
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return rows
+    finally:
+        conn.close()
+
+
 def insert_article(article: dict[str, Any]) -> bool:
     with _db_lock:
         conn = _conn()
