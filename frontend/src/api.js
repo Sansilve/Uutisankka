@@ -50,3 +50,7 @@ export function sendFeedback(payload) {
 export function fetchMetrics(limit = 10) {
   return request(`/api/metrics?limit=${limit}`)
 }
+
+export function triggerReenrich() {
+  return request('/api/admin/reenrich', { method: 'POST' })
+}

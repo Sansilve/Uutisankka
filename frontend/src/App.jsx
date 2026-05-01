@@ -6,6 +6,7 @@ import {
   fetchRandomBriefing,
   sendFeedback,
   triggerIngest,
+  triggerReenrich,
   updatePreferences,
 } from './api'
 import './App.css'
@@ -163,6 +164,19 @@ function App() {
     }
   }
 
+  async function reenrichAll() {
+    setBusy(true)
+    setStatus('Pisteytetään uudelleen uusilla tageilla...')
+    try {
+      const result = await triggerReenrich()
+      await loadAll()
+      setStatus(`Valmis – ${result.reset} artikkelia nollattu, ${result.enriched} pisteytetty uudelleen`)
+    } catch (error) {
+      setStatus(`Virhe: ${error.message}`)
+      setBusy(false)
+    }
+  }
+
   async function rateStory(articleId, isRelevant) {
     setBusy(true)
     try {
@@ -226,6 +240,7 @@ function App() {
         </div>
         <div className="actions">
           <button onClick={refreshIngest} disabled={busy}>Päivitä syötteet</button>
+          <button onClick={reenrichAll} disabled={busy} title="Pisteytetään kaikki artikkelit uudelleen uusilla kategoriasäännöillä">↻ Pisteytä uudelleen</button>
           <button onClick={speakTopStories} disabled={!activeStories.length}>Kuuntele top 5</button>
         </div>
       </header>

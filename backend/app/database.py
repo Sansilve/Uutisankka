@@ -237,6 +237,28 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
         conn.close()
 
 
+def reset_all_enrichment() -> int:
+    """Reset scoring/topic/summary fields on ALL articles so they get re-enriched.
+    Returns the number of rows reset."""
+    with _db_lock:
+        conn = _conn()
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE articles
+                SET base_score = 0,
+                    score = 0,
+                    topics = '[]',
+                    score_breakdown_json = '{"items": []}',
+                    summary_json = '{"bullets": []}'
+                """
+            )
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            conn.close()
+
+
 def get_article_feedback_score(article_id: int) -> float:
     conn = _conn()
     try:

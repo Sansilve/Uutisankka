@@ -13,6 +13,7 @@ from .database import (
     get_preferences,
     init_db,
     random_briefing,
+    reset_all_enrichment,
     top_briefing,
     top_feedback_metrics,
     upsert_preferences,
@@ -134,6 +135,14 @@ def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingRespons
 @app.get("/api/briefing/random", response_model=BriefingResponse)
 def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
     return _rows_to_briefing(random_briefing(limit))
+
+
+@app.post("/api/admin/reenrich")
+def admin_reenrich() -> dict[str, int]:
+    """Reset all article scoring data and re-enrich with current scoring rules."""
+    reset_count = reset_all_enrichment()
+    enriched = enrich_unprocessed_articles()
+    return {"reset": reset_count, "enriched": enriched["enriched"]}
 
 
 @app.post("/api/feedback", response_model=FeedbackResponse)
