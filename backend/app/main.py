@@ -4,7 +4,7 @@ import json
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI, Query
+from fastapi import BackgroundTasks, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import (
@@ -32,7 +32,10 @@ from .models import (
 )
 from .services.ingest import enrich_unprocessed_articles, ingest_feeds
 
-background_task: asyncio.Task | None = None
+import threading
+
+# Simple in-memory flag so the frontend can poll reenrich progress.
+_reenrich_status: dict[str, str | int] = {"state": "idle", "enriched": 0}
 
 
 async def periodic_ingest() -> None:
@@ -86,13 +89,19 @@ def read_preferences() -> PreferenceProfile:
 
 
 @app.put("/api/preferences", response_model=PreferenceProfile)
-def update_preferences(payload: PreferenceUpdate) -> PreferenceProfile:
+def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTasks) -> PreferenceProfile:
     upsert_preferences(payload.interests, payload.disliked_topics)
-    # Re-score ALL existing articles with the new preference weights.
-    # Simply calling enrich_unprocessed_articles() would skip already-scored articles.
-    reset_all_enrichment()
-    enrich_unprocessed_articles()
+    # Run re-scoring in the background so the HTTP response returns immediately.
+    background_tasks.add_task(_reenrich_all)
     return PreferenceProfile(**get_preferences())
+
+
+def _reenrich_all() -> None:
+    global _reenrich_status
+    _reenrich_status = {"state": "running", "enriched": 0}
+    reset_all_enrichment()
+    enriched = enrich_unprocessed_articles()
+    _reenrich_status = {"state": "done", "enriched": enriched}
 
 
 def _rows_to_briefing(rows) -> BriefingResponse:
@@ -127,9 +136,6 @@ def _rows_to_briefing(rows) -> BriefingResponse:
 
 @app.get("/api/briefing", response_model=BriefingResponse)
 def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
-    rows = top_briefing(limit)
-    stories: list[ArticleBrief] = []
-
     return _rows_to_briefing(top_briefing(limit))
 
 
@@ -139,11 +145,17 @@ def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> Briefing
 
 
 @app.post("/api/admin/reenrich")
-def admin_reenrich() -> dict[str, int]:
-    """Reset all article scoring data and re-enrich with current scoring rules."""
-    reset_count = reset_all_enrichment()
-    enriched = enrich_unprocessed_articles()  # returns int
-    return {"reset": reset_count, "enriched": enriched}
+def admin_reenrich(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Trigger a full re-score in the background. Poll /api/admin/reenrich/status."""
+    if _reenrich_status["state"] == "running":
+        return {"state": "already_running"}
+    background_tasks.add_task(_reenrich_all)
+    return {"state": "started"}
+
+
+@app.get("/api/admin/reenrich/status")
+def reenrich_status() -> dict[str, str | int]:
+    return _reenrich_status
 
 
 @app.post("/api/feedback", response_model=FeedbackResponse)

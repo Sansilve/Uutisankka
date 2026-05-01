@@ -4,6 +4,7 @@ import {
   fetchMetrics,
   fetchPreferences,
   fetchRandomBriefing,
+  fetchReenrichStatus,
   sendFeedback,
   triggerIngest,
   triggerReenrich,
@@ -116,9 +117,33 @@ function App() {
     setUnsaved(true)
   }
 
+  // Poll backend until reenrich is done, then reload briefing.
+  async function pollReenrich() {
+    const INTERVAL = 1500
+    const MAX_WAIT = 120_000
+    const start = Date.now()
+    while (Date.now() - start < MAX_WAIT) {
+      await new Promise((r) => setTimeout(r, INTERVAL))
+      try {
+        const s = await fetchReenrichStatus()
+        const done = s.state === 'done'
+        setStatus(`Pisteytetty ${s.enriched ?? 0} artikkelia${done ? ' – valmis!' : '...'}`)
+        if (done) {
+          await loadAll()
+          setBusy(false)
+          return
+        }
+      } catch (_) {
+        // ignore transient errors, keep polling
+      }
+    }
+    setStatus('Pisteytys kesti liian kauan – päivitä sivu.')
+    setBusy(false)
+  }
+
   async function savePreferences() {
     setBusy(true)
-    setStatus('Tallennetaan ja pisteytetään uudelleen...')
+    setStatus('Tallennetaan...')
     try {
       const payload = {
         interests: [...selectedCategories],
@@ -126,8 +151,8 @@ function App() {
       }
       await updatePreferences(payload)
       setUnsaved(false)
-      await loadAll()
-      setStatus('Asetukset tallennettu – uutiset pisteytetty uudelleen')
+      setStatus('Tallennettu – pisteytetään uudelleen...')
+      pollReenrich()   // non-blocking: returns immediately, updates status while running
     } catch (error) {
       setStatus(`Virhe: ${error.message}`)
       setBusy(false)
@@ -169,11 +194,11 @@ function App() {
 
   async function reenrichAll() {
     setBusy(true)
-    setStatus('Pisteytetään uudelleen uusilla tageilla...')
+    setStatus('Käynnistetään pisteytys...')
     try {
-      const result = await triggerReenrich()
-      await loadAll()
-      setStatus(`Valmis – ${result.reset} artikkelia nollattu, ${result.enriched} pisteytetty uudelleen`)
+      await triggerReenrich()
+      setStatus('Pisteytetään – odota...')
+      pollReenrich()
     } catch (error) {
       setStatus(`Virhe: ${error.message}`)
       setBusy(false)
