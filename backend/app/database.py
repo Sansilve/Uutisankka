@@ -287,6 +287,33 @@ def batch_update_scores(updates: list[tuple]) -> int:
             conn.close()
 
 
+def fetch_articles_by_topics(topics: list[str]) -> list[sqlite3.Row]:
+    """Return all scored articles that have ANY of the given topics detected.
+    Uses SQLite json_each() as an inverted index: O(n) table scan, <5ms for thousands of rows.
+    Fetches content too so score_article() can re-run keyword matching.
+    """
+    if not topics:
+        return []
+    placeholders = ",".join("?" * len(topics))
+    conn = _conn()
+    try:
+        return conn.execute(
+            f"""
+            SELECT id, title, content, source, published_at, feedback_score
+            FROM articles
+            WHERE topics IS NOT NULL
+              AND topics != '[]'
+              AND EXISTS (
+                  SELECT 1 FROM json_each(articles.topics)
+                  WHERE json_each.value IN ({placeholders})
+              )
+            """,
+            topics,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 def reset_all_enrichment() -> int:
     """Reset ONLY scoring fields on all articles — summaries are preserved.
     Returns the number of rows reset."""

@@ -15,6 +15,7 @@ from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
     batch_update_scores,
+    fetch_articles_by_topics,
     fetch_unenriched,
     fetch_unscored,
     get_article_feedback_score,
@@ -187,4 +188,44 @@ def rescore_all(preferences: dict | None = None) -> int:
         ))
 
     # Write everything in a single transaction
+    return batch_update_scores(updates)
+
+
+def rescore_for_topics(changed_topics: list[str], preferences: dict | None = None) -> int:
+    """Targeted rescore: only articles that contain ANY of the changed topics.
+
+    Uses fetch_articles_by_topics() as an inverted index lookup so we skip
+    all articles that cannot be affected by the preference change.
+    No DB reset — existing scores for unaffected articles remain intact.
+    Single batch transaction for all writes.
+    """
+    if not changed_topics:
+        return 0
+    if preferences is None:
+        preferences = get_preferences()
+
+    # Inverted-index lookup: O(n) scan but <5ms for thousands of rows
+    rows = fetch_articles_by_topics(changed_topics)
+    if not rows:
+        return 0
+
+    updates: list[tuple] = []
+    for row in rows:
+        base_score, topics, breakdown_items = score_article(
+            title=row["title"],
+            content=row["content"] or "",
+            source=row["source"],
+            published_at=row["published_at"],
+            preferences=preferences,
+        )
+        feedback_score = float(row["feedback_score"] or 0.0)  # already fetched, no extra query
+        total_score = round(base_score + feedback_score, 2)
+        updates.append((
+            base_score,
+            total_score,
+            json.dumps(topics),
+            json.dumps({"items": breakdown_items}),
+            row["id"],
+        ))
+
     return batch_update_scores(updates)

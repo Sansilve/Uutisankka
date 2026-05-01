@@ -30,7 +30,7 @@ from .models import (
     ScoreBreakdownPayload,
     SummaryPayload,
 )
-from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all
+from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics
 
 import threading
 
@@ -90,17 +90,33 @@ def read_preferences() -> PreferenceProfile:
 
 @app.put("/api/preferences", response_model=PreferenceProfile)
 def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTasks) -> PreferenceProfile:
+    old_prefs = get_preferences()
     upsert_preferences(payload.interests, payload.disliked_topics)
-    # Run re-scoring in the background so the HTTP response returns immediately.
-    background_tasks.add_task(_reenrich_all)
-    return PreferenceProfile(**get_preferences())
+    new_prefs = get_preferences()
+    # Compute which topics actually changed so we can do a targeted rescore.
+    changed_topics = _diff_topics(old_prefs, new_prefs)
+    background_tasks.add_task(_reenrich_changed, changed_topics, new_prefs)
+    return PreferenceProfile(**new_prefs)
 
 
-def _reenrich_all() -> None:
+def _diff_topics(old: dict, new: dict) -> list[str]:
+    """Return the topic IDs that were added or removed in either interests or dislikes."""
+    old_set = set(old.get("interests", [])) | set(old.get("disliked_topics", []))
+    new_set = set(new.get("interests", [])) | set(new.get("disliked_topics", []))
+    return list(old_set.symmetric_difference(new_set))
+
+
+def _reenrich_changed(changed_topics: list[str], preferences: dict) -> None:
+    """Targeted rescore: only articles affected by the changed topics.
+    Falls back to full rescore+reset when called from the admin endpoint (empty changed_topics)."""
     global _reenrich_status
     _reenrich_status = {"state": "running", "enriched": 0}
-    reset_all_enrichment()          # clears scores only — summaries preserved
-    enriched = rescore_all()        # pure scoring, no LLM calls
+    if changed_topics:
+        enriched = rescore_for_topics(changed_topics, preferences)
+    else:
+        # Admin-triggered or first run: full rescore
+        reset_all_enrichment()
+        enriched = rescore_all(preferences)
     _reenrich_status = {"state": "done", "enriched": enriched}
 
 
@@ -149,7 +165,7 @@ def admin_reenrich(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Trigger a full re-score in the background. Poll /api/admin/reenrich/status."""
     if _reenrich_status["state"] == "running":
         return {"state": "already_running"}
-    background_tasks.add_task(_reenrich_all)
+    background_tasks.add_task(_reenrich_changed, [], get_preferences())  # [] = full rescore
     return {"state": "started"}
 
 
