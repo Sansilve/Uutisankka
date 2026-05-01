@@ -7,13 +7,119 @@ from dateutil import parser
 
 from ..config import MAJOR_SOURCES
 
-TOPIC_KEYWORDS = {
-    "technology": ["ai", "software", "chip", "tech", "startup", "cyber", "cloud"],
-    "politics": ["government", "parliament", "policy", "election", "minister", "president"],
-    "economy": ["inflation", "gdp", "market", "interest rate", "economy", "trade", "employment"],
-    "geopolitics": ["nato", "ukraine", "russia", "china", "sanctions", "war", "diplomacy"],
-    "celebrity": ["celebrity", "reality star", "influencer", "gossip"],
-    "entertainment": ["tv show", "movie", "red carpet", "music video"],
+# Keys match the chip IDs in the frontend exactly.
+# Each list contains Finnish and English keywords found in article text/titles.
+TOPIC_KEYWORDS: dict[str, list[str]] = {
+    # --- interest categories ---
+    "politiikka": [
+        "hallitus", "eduskunta", "ministeri", "presidentti", "puolue", "vaali", "poliitikko",
+        "oppositio", "hallituspuolue", "budjetti", "lakiesitys", "äänestys", "koalitio",
+        "government", "parliament", "minister", "president", "election", "policy", "senate",
+    ],
+    "talous": [
+        "inflaatio", "bkt", "talous", "kauppa", "markkinat", "korkojen", "työllisyys",
+        "vienti", "tuonti", "pörssit", "osakekurssi", "pankki", "lainaa", "verotus",
+        "yrittäjä", "yritys", "liikevaihto", "tulos", "voitto", "tappio", "konkurssi",
+        "inflation", "gdp", "economy", "market", "interest rate", "trade", "employment",
+        "revenue", "profit", "bankruptcy", "stock", "shares", "finance",
+    ],
+    "teknologia": [
+        "tekoäly", "ai", "ohjelmisto", "siru", "startup", "kyber", "pilvi", "data",
+        "robotti", "sovellus", "älypuhelin", "tietoturva", "digitalisaatio", "koneoppiminen",
+        "software", "chip", "tech", "cyber", "cloud", "algorithm", "machine learning",
+        "automation", "semiconductor", "quantum", "5g", "blockchain",
+    ],
+    "urheilu": [
+        "jalkapallo", "jääkiekko", "yleisurheilu", "tennis", "koripallo", "pesäpallo",
+        "formula", "hiihto", "mm-kisat", "olympia", "liiga", "turnaus", "ottelu", "maajoukkue",
+        "voittaja", "mestaruus", "tulospalvelu",
+        "football", "hockey", "athletics", "basketball", "formula 1", "championship",
+        "tournament", "match", "league", "olympic", "world cup",
+    ],
+    "kulttuuri": [
+        "kulttuuri", "taide", "museo", "teatteri", "kirjallisuus", "kirja", "romaani",
+        "elokuva", "musiikki", "konsertti", "festivaali", "näyttely", "palkinto",
+        "art", "museum", "theatre", "literature", "book", "film", "movie", "music",
+        "concert", "festival", "exhibition", "award",
+    ],
+    "terveys": [
+        "terveys", "sairaala", "lääkäri", "rokote", "pandemia", "epidemia", "virus",
+        "hoito", "lääke", "tutkimus", "syöpä", "diabetes", "sydän", "mielenterveys",
+        "health", "hospital", "vaccine", "pandemic", "disease", "treatment", "medicine",
+        "cancer", "diabetes", "mental health", "surgery", "clinical",
+    ],
+    "ympäristö": [
+        "ilmasto", "ympäristö", "hiilidioksidi", "päästöt", "fossiiliset", "uusiutuva",
+        "tuulivoima", "aurinkoenergia", "biodiversiteetti", "luonnon", "saaste", "kierrätys",
+        "climate", "environment", "emissions", "fossil", "renewable", "wind energy",
+        "solar", "biodiversity", "pollution", "recycling", "carbon",
+    ],
+    "tiede": [
+        "tiede", "tutkimus", "tutkijat", "yliopisto", "löytö", "avaruus", "tähtitiede",
+        "biologia", "kemia", "fysiikka", "geologia", "arkeologia",
+        "science", "research", "scientists", "university", "discovery", "space",
+        "astronomy", "biology", "chemistry", "physics", "geology", "archaeology",
+    ],
+    "turvallisuus": [
+        "turvallisuus", "poliisi", "rikostutkinta", "terrorismi", "sotilas", "puolustus",
+        "nato", "armeija", "konflikti", "sota", "hyökkäys", "kyberturvallisuus",
+        "security", "police", "terrorism", "military", "defence", "defense", "nato",
+        "army", "conflict", "war", "attack", "cybersecurity", "intelligence",
+    ],
+    "koulutus": [
+        "koulutus", "koulu", "yliopisto", "opiskelu", "opiskelija", "opettaja",
+        "lukio", "ammattikoulu", "opinto", "tutkinto", "päiväkoti",
+        "education", "school", "university", "student", "teacher", "study",
+        "degree", "curriculum", "kindergarten", "learning",
+    ],
+    "kansainväliset": [
+        "ukraina", "venäjä", "kiina", "yhdysvallat", "eu", "eurooppa", "pakotteet",
+        "diplomatia", "ulkoministeri", "yhdistyneet kansakunnat", "imf", "maailmanpankki",
+        "ukraine", "russia", "china", "united states", "sanctions", "diplomacy",
+        "united nations", "european union", "geopolitics", "nato summit", "g7", "g20",
+    ],
+    # --- disliked / negative categories ---
+    "viihde": [
+        "viihde", "tosi-tv", "realityohjelma", "juorupalsta", "julkisuuden henkilö",
+        "celebrity", "reality", "gossip", "entertainment", "tv show", "red carpet",
+        "music video", "influencer", "tiktoker",
+    ],
+    "celebrity": [
+        "julkkis", "julkisuuden henkilö", "tähti", "kuuluisuus", "muusikko",
+        "näyttelijä", "influencer",
+        "celebrity", "reality star", "gossip", "influencer", "famous",
+    ],
+    "rikokset": [
+        "rikos", "murha", "pahoinpitely", "varkaus", "huumeet", "tuomio", "pidätys",
+        "crime", "murder", "assault", "theft", "drugs", "conviction", "arrest",
+    ],
+    "onnettomuudet": [
+        "onnettomuus", "kaatui", "tulipalo", "liikenneonnettomuus", "kolari",
+        "accident", "crash", "fire", "collision", "disaster",
+    ],
+    "sää": [
+        "sää", "lämpötila", "ennuste", "pakkanen", "lumimyrsky", "helle", "ukkonen",
+        "weather", "temperature", "forecast", "storm", "heatwave", "snow", "frost",
+    ],
+}
+
+TOPIC_WEIGHTS: dict[str, float] = {
+    "politiikka":    2.8,
+    "talous":        2.3,
+    "teknologia":    2.4,
+    "urheilu":       1.5,
+    "kulttuuri":     1.2,
+    "terveys":       2.0,
+    "ympäristö":     1.8,
+    "tiede":         1.8,
+    "turvallisuus":  2.6,
+    "koulutus":      1.5,
+    "kansainväliset": 2.5,
+    "viihde":       -1.6,
+    "celebrity":    -2.5,
+    "rikokset":     -0.8,
+    "onnettomuudet": -0.5,
+    "sää":          -0.5,
 }
 
 CLICKBAIT_PATTERNS = [
@@ -23,6 +129,8 @@ CLICKBAIT_PATTERNS = [
     r"this one trick",
     r"goes viral",
     r"must see",
+    r"et usko",
+    r"hämmästyttävä",
 ]
 
 LOW_SIGNAL_PATTERNS = [
@@ -32,7 +140,7 @@ LOW_SIGNAL_PATTERNS = [
     r"live updates",
 ]
 
-BREAKING_HINTS = ["breaking", "urgent", "developing"]
+BREAKING_HINTS = ["breaking", "urgent", "developing", "juuri nyt", "äskettäin", "tärkeää"]
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -52,11 +160,11 @@ def _parse_time(value: str | None) -> datetime | None:
 
 def detect_topics(text: str) -> list[str]:
     haystack = text.lower()
-    topics: list[str] = []
-    for topic, words in TOPIC_KEYWORDS.items():
-        if any(word in haystack for word in words):
-            topics.append(topic)
-    return topics
+    return [
+        topic
+        for topic, words in TOPIC_KEYWORDS.items()
+        if any(word in haystack for word in words)
+    ]
 
 
 def _recency_boost(published_at: str | None) -> float:
@@ -86,16 +194,8 @@ def score_article(
         score += 1.0
         breakdown.append({"reason": "Major source boost", "points": 1.0})
 
-    topic_weights = {
-        "politics": 2.8,
-        "technology": 2.4,
-        "economy": 2.3,
-        "geopolitics": 2.6,
-        "celebrity": -2.5,
-        "entertainment": -1.6,
-    }
     for topic in topics:
-        points = topic_weights.get(topic, 0.0)
+        points = TOPIC_WEIGHTS.get(topic, 0.0)
         if points != 0:
             score += points
             breakdown.append({"reason": f"Topic match: {topic}", "points": points})
@@ -118,14 +218,14 @@ def score_article(
         score += 1.2
         breakdown.append({"reason": "Breaking news hint", "points": 1.2})
 
-    interests = set(item.lower() for item in preferences.get("interests", []))
-    dislikes = set(item.lower() for item in preferences.get("disliked_topics", []))
+    interests = {item.lower() for item in preferences.get("interests", [])}
+    dislikes = {item.lower() for item in preferences.get("disliked_topics", [])}
 
     for interest in interests:
         if interest in topics:
             score += 2.0
             breakdown.append({"reason": f"Interest topic boost: {interest}", "points": 2.0})
-        if interest in combined:
+        elif interest in combined:
             score += 0.8
             breakdown.append({"reason": f"Interest text boost: {interest}", "points": 0.8})
 
@@ -133,7 +233,7 @@ def score_article(
         if dislike in topics:
             score -= 3.0
             breakdown.append({"reason": f"Disliked topic penalty: {dislike}", "points": -3.0})
-        if dislike in combined:
+        elif dislike in combined:
             score -= 1.0
             breakdown.append({"reason": f"Disliked text penalty: {dislike}", "points": -1.0})
 
@@ -143,3 +243,4 @@ def score_article(
         breakdown.append({"reason": "Recency adjustment", "points": round(recency_points, 2)})
 
     return round(score, 2), topics, breakdown
+

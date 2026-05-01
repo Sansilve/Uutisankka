@@ -1,5 +1,6 @@
 import hashlib
 import html
+import json
 import re
 from datetime import timezone
 from difflib import SequenceMatcher
@@ -12,12 +13,17 @@ import feedparser
 from ..config import DEFAULT_FEEDS
 from ..database import (
     article_exists_with_hash,
+    batch_fetch_feedback_scores,
+    batch_update_scores,
+    fetch_articles_by_topics,
     fetch_unenriched,
+    fetch_unscored,
     get_article_feedback_score,
     get_preferences,
     insert_article,
     recent_titles,
     update_article_enrichment,
+    update_article_score_only,
 )
 from .scoring import score_article
 from .summarizer import summarize_article
@@ -124,11 +130,12 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
 
 
 def enrich_unprocessed_articles() -> int:
+    """Generate summaries for new articles, then score anything unscored."""
     preferences = get_preferences()
-    rows = fetch_unenriched(limit=300)
     count = 0
 
-    for row in rows:
+    # Step 1: summarise articles that have no summary yet
+    for row in fetch_unenriched(limit=300):
         base_score, topics, breakdown_items = score_article(
             title=row["title"],
             content=row["content"] or "",
@@ -140,13 +147,85 @@ def enrich_unprocessed_articles() -> int:
         total_score = round(base_score + feedback_score, 2)
         summary = summarize_article(row["title"], row["content"] or "")
         update_article_enrichment(
-            row["id"],
-            base_score,
-            total_score,
-            topics,
-            summary,
-            {"items": breakdown_items},
+            row["id"], base_score, total_score, topics, summary, {"items": breakdown_items}
         )
         count += 1
 
+    # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
+    count += rescore_all(preferences)
     return count
+
+
+def rescore_all(preferences: dict | None = None) -> int:
+    """Re-score all articles with base_score=0. Pure Python scoring, no LLM, single DB transaction."""
+    if preferences is None:
+        preferences = get_preferences()
+    rows = fetch_unscored(limit=5000)
+    if not rows:
+        return 0
+
+    # Fetch all feedback scores in ONE query instead of one per article
+    feedback_scores = batch_fetch_feedback_scores()
+
+    # Score all articles in memory
+    updates: list[tuple] = []
+    for row in rows:
+        base_score, topics, breakdown_items = score_article(
+            title=row["title"],
+            content=row["content"] or "",
+            source=row["source"],
+            published_at=row["published_at"],
+            preferences=preferences,
+        )
+        feedback_score = feedback_scores.get(row["id"], 0.0)
+        total_score = round(base_score + feedback_score, 2)
+        updates.append((
+            base_score,
+            total_score,
+            json.dumps(topics),
+            json.dumps({"items": breakdown_items}),
+            row["id"],
+        ))
+
+    # Write everything in a single transaction
+    return batch_update_scores(updates)
+
+
+def rescore_for_topics(changed_topics: list[str], preferences: dict | None = None) -> int:
+    """Targeted rescore: only articles that contain ANY of the changed topics.
+
+    Uses fetch_articles_by_topics() as an inverted index lookup so we skip
+    all articles that cannot be affected by the preference change.
+    No DB reset — existing scores for unaffected articles remain intact.
+    Single batch transaction for all writes.
+    """
+    if not changed_topics:
+        return 0
+    if preferences is None:
+        preferences = get_preferences()
+
+    # Inverted-index lookup: O(n) scan but <5ms for thousands of rows
+    rows = fetch_articles_by_topics(changed_topics)
+    if not rows:
+        return 0
+
+    updates: list[tuple] = []
+    for row in rows:
+        base_score, topics, breakdown_items = score_article(
+            title=row["title"],
+            content=row["content"] or "",
+            source=row["source"],
+            published_at=row["published_at"],
+            preferences=preferences,
+        )
+        feedback_score = float(row["feedback_score"] or 0.0)  # already fetched, no extra query
+        total_score = round(base_score + feedback_score, 2)
+        updates.append((
+            base_score,
+            total_score,
+            json.dumps(topics),
+            json.dumps({"items": breakdown_items}),
+            row["id"],
+        ))
+
+    return batch_update_scores(updates)

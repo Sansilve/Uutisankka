@@ -139,6 +139,31 @@ def get_preferences() -> dict[str, list[str]]:
         conn.close()
 
 
+def random_briefing(limit: int = 10) -> list:
+    """Return *limit* random enriched articles (score > 0), shuffled each call."""
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                a.id, a.title, a.source, a.published_at, a.url,
+                a.score, a.base_score, a.feedback_score,
+                a.topics, a.summary_json, a.score_breakdown_json,
+                COALESCE(f.positive_count, 0) AS feedback_positive,
+                COALESCE(f.negative_count, 0) AS feedback_negative
+            FROM articles a
+            LEFT JOIN article_feedback f ON f.article_id = a.id
+            WHERE a.score > 0
+            ORDER BY RANDOM()
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return rows
+    finally:
+        conn.close()
+
+
 def insert_article(article: dict[str, Any]) -> bool:
     with _db_lock:
         conn = _conn()
@@ -192,16 +217,14 @@ def recent_titles(limit: int = 250) -> list[str]:
 
 
 def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
+    """Articles that still need a summary generated."""
     conn = _conn()
     try:
         rows = conn.execute(
             """
             SELECT id, title, source, published_at, content, url
             FROM articles
-            WHERE
-                summary_json = '{"bullets": []}'
-                OR score_breakdown_json = '{"items": []}'
-                OR base_score = 0
+            WHERE summary_json = '{"bullets": []}'
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -210,6 +233,106 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
         return rows
     finally:
         conn.close()
+
+
+def fetch_unscored(limit: int = 5000) -> list[sqlite3.Row]:
+    """Articles that have a summary but need (re-)scoring. Excludes heavy content column."""
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, title, source, published_at, content
+            FROM articles
+            WHERE base_score = 0
+              AND summary_json != '{"bullets": []}'
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return rows
+    finally:
+        conn.close()
+
+
+def batch_fetch_feedback_scores() -> dict[int, float]:
+    """Return {article_id: feedback_score} for all articles in one query."""
+    conn = _conn()
+    try:
+        rows = conn.execute("SELECT id, feedback_score FROM articles").fetchall()
+        return {row["id"]: float(row["feedback_score"] or 0.0) for row in rows}
+    finally:
+        conn.close()
+
+
+def batch_update_scores(updates: list[tuple]) -> int:
+    """Write (base_score, score, topics_json, breakdown_json, id) rows in a single transaction.
+    Returns number of rows updated."""
+    if not updates:
+        return 0
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.executemany(
+                """
+                UPDATE articles
+                SET base_score = ?, score = ?, topics = ?, score_breakdown_json = ?
+                WHERE id = ?
+                """,
+                updates,
+            )
+            conn.commit()
+            return len(updates)
+        finally:
+            conn.close()
+
+
+def fetch_articles_by_topics(topics: list[str]) -> list[sqlite3.Row]:
+    """Return all scored articles that have ANY of the given topics detected.
+    Uses SQLite json_each() as an inverted index: O(n) table scan, <5ms for thousands of rows.
+    Fetches content too so score_article() can re-run keyword matching.
+    """
+    if not topics:
+        return []
+    placeholders = ",".join("?" * len(topics))
+    conn = _conn()
+    try:
+        return conn.execute(
+            f"""
+            SELECT id, title, content, source, published_at, feedback_score
+            FROM articles
+            WHERE topics IS NOT NULL
+              AND topics != '[]'
+              AND EXISTS (
+                  SELECT 1 FROM json_each(articles.topics)
+                  WHERE json_each.value IN ({placeholders})
+              )
+            """,
+            topics,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def reset_all_enrichment() -> int:
+    """Reset ONLY scoring fields on all articles — summaries are preserved.
+    Returns the number of rows reset."""
+    with _db_lock:
+        conn = _conn()
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE articles
+                SET base_score = 0,
+                    score = 0,
+                    topics = '[]',
+                    score_breakdown_json = '{"items": []}'
+                """
+            )
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            conn.close()
 
 
 def get_article_feedback_score(article_id: int) -> float:
@@ -248,6 +371,36 @@ def update_article_enrichment(
                     total_score,
                     json.dumps(topics),
                     json.dumps(summary),
+                    json.dumps(score_breakdown),
+                    article_id,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def update_article_score_only(
+    article_id: int,
+    base_score: float,
+    total_score: float,
+    topics: list[str],
+    score_breakdown: dict[str, Any],
+) -> None:
+    """Update score/topics/breakdown without touching the summary."""
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.execute(
+                """
+                UPDATE articles
+                SET base_score = ?, score = ?, topics = ?, score_breakdown_json = ?
+                WHERE id = ?
+                """,
+                (
+                    base_score,
+                    total_score,
+                    json.dumps(topics),
                     json.dumps(score_breakdown),
                     article_id,
                 ),
@@ -349,6 +502,9 @@ def top_briefing(limit: int = 10) -> list[sqlite3.Row]:
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
             LEFT JOIN article_feedback f ON f.article_id = a.id
+            WHERE a.score > 0
+              AND (a.published_at IS NULL
+                   OR datetime(a.published_at) >= datetime('now', '-48 hours'))
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,
