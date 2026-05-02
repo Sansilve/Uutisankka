@@ -49,10 +49,18 @@ Onboarding → Daily briefing → Swipe feedback → History → Preferences
 ```
 backend/
   app/
-    main.py          FastAPI app and all routes
-    database.py      SQLite schema and thread-safe query helpers
+    main.py          App bootstrap: logging config, CORS, lifespan, router mounting
     config.py        RSS feed list, topic weights, regional settings
+    database.py      SQLite schema and thread-safe query helpers
     models.py        Pydantic request/response schemas
+    api/
+      briefing.py    GET /api/briefing, GET /api/briefing/random
+      preferences.py GET|PUT /api/preferences
+      feedback.py    POST /api/feedback
+      articles.py    GET /api/history, /api/metrics, /api/articles
+      ingest.py      POST /api/ingest
+      admin.py       POST /api/admin/reenrich, /api/admin/resummarize + status
+      errors.py      Global exception handler → {"detail": …, "error_code": …}
     services/
       ingest.py      RSS fetch, dedup, enrichment orchestration
       scoring.py     Relevance and no-BS scoring logic
@@ -60,9 +68,16 @@ backend/
       translator.py  English → Finnish translation for intl sources
 
 frontend-mobile/
-  App.jsx            Screen navigation and top-level state
+  App.jsx            Screen orchestrator (thin shell, imports domain hooks)
   src/
-    api.js           API client (configure base URL via env)
+    api.js           API client (configure base URL via EXPO_PUBLIC_API_BASE)
+    navigation/
+      routes.js              Route name constants
+      useAppNavigation.js    Navigation state hook
+    state/
+      useBriefingState.js    Article, progress, and surprise story state
+      usePreferencesState.js User preferences state
+      useSessionUiState.js   Onboarding, loading, busy, error state
     components/
       OnboardingScreen.jsx   First-run setup flow
       ArticleCard.jsx        Swipe card UI and feedback
@@ -87,6 +102,12 @@ python3.10 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Copy `.env.example` to `.env` and add your `OPENAI_API_KEY` to enable LLM summarization. Without it the app falls back to deterministic summaries.
+
+Optional env vars:
+- `LOG_LEVEL` — logging verbosity: `DEBUG`, `INFO` (default), `WARNING`
+- `CORS_ALLOW_ORIGINS` — comma-separated extra origins beyond the defaults
+- `CORS_ALLOW_ORIGIN_REGEX` — regex for dynamic Expo tunnels (e.g. `https://.*\.ngrok\.io`)
+- `INGEST_INTERVAL_SECONDS` — background feed polling interval (default: `1800`)
 
 ### 2) Mobile (Expo)
 
@@ -130,4 +151,5 @@ Open `http://127.0.0.1:5173`.
 | GET | `/api/history?limit=100` | Swipe history |
 | GET | `/api/metrics?limit=10` | Acceptance rate and feedback stats |
 | POST | `/api/admin/reenrich` | Re-score all articles in background |
+| POST | `/api/admin/resummarize` | Reset and regenerate all summaries |
 | GET | `/api/admin/reenrich/status` | Background job status |

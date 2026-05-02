@@ -5,12 +5,15 @@ Primary path  : OpenAI chat completion → 3–5 Finnish bullet points.
 Fallback path : Deterministic heuristic summarizer (no API key required).
 """
 
+import logging
 import re
 from collections import Counter
 
 from openai import OpenAI, OpenAIError
 
 from ..config import LLM_MODEL, OPENAI_API_KEY
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared OpenAI client (lazy-initialised once)
@@ -90,8 +93,8 @@ def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
         bullets = [b for b in bullets if len(b) > 10]
         if bullets:
             return {"bullets": bullets[:5], "source": "llm"}
-    except OpenAIError:
-        pass
+    except OpenAIError as exc:
+        log.warning("_llm_summarize: OpenAI API error – %s", exc)
 
     return None
 
@@ -238,10 +241,13 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
         is_paywall = False
 
     if is_paywall:
+        log.debug("summarize_article: paywall detected for '%s' (source=%s)", title[:60], source)
         return {"bullets": [], "source": "no_content"}
 
     result = _llm_summarize(title, content)
     if result is not None:
+        log.debug("summarize_article: LLM summary OK for '%s'", title[:60])
         return result
+    log.debug("summarize_article: LLM unavailable/failed, using heuristic for '%s'", title[:60])
     return _deterministic_summarize(title, content)
 
