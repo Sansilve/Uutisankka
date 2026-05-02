@@ -37,8 +37,8 @@ Esimerkiksi: "Leikkaukset vaikuttavat palvelujen saatavuuteen" tai \
 ÄLÄ toista "Mitä tapahtui" -kohtaa eri sanoin. Saa käyttää yleistietoa artikkelin lisäksi.
 
 - Osapuolet: VAIN jos henkilöt/organisaatiot ovat merkittäviä tai yllättäviä. \
-Esimerkiksi: "Pääministeri Orpo", "Euroopan komissio", "OpenAI". \
-JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija).
+Esimerkiksi: "Pääministeri Petteri Orpo", "Euroopan komissio", "OpenAI". \
+JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija), käytä perusmuotoja.
 
 - Tausta: Relevantti konteksti — vain jos selittää miksi tilanne on syntynyt.
 
@@ -162,7 +162,7 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
 
     # Paywall keywords in Finnish/English that indicate subscriber-only content
     _PAYWALL_WORDS = [
-        "tilaajille", "tilaa", "vain tilaajille", "maksullinen",
+        "tilaajille", "vain tilaajille", "maksullinen",
         "subscribers only", "premium", "paywall",
     ]
     has_paywall_word = any(w in norm_content for w in _PAYWALL_WORDS)
@@ -212,8 +212,9 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     elif is_likely_paywalled_source and not is_mixed_tabloid_source:
         is_paywall = teaser_paywall
     elif is_mixed_tabloid_source:
-        # IS/IL feeds often have very short but free leads.
-        is_paywall = len(stripped) < 120 and sentence_count <= 1
+        # IS/IL RSS feeds give short free leads — only rely on hard keyword evidence.
+        # Prefer false negatives over false positives (loose detection).
+        is_paywall = False
     else:
         # For free/unknown sources, do not mark paywall from short teaser alone.
         is_paywall = False
