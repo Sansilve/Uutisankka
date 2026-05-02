@@ -331,7 +331,6 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
             FROM articles
             WHERE summary_json IS NULL
                OR summary_json = '{"bullets": []}'
-               OR json_extract(summary_json, '$.source') = 'heuristic'
             ORDER BY created_at DESC
             LIMIT ?
             """,

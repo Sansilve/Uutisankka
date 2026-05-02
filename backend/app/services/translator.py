@@ -114,10 +114,14 @@ def translate_and_summarize(
         if bullets:
             return finnish_title, {"bullets": bullets[:5], "source": "llm"}
 
+        # LLM responded but we couldn't parse bullets — fall back to deterministic
+        log.debug("translate_and_summarize: no bullets parsed from LLM response, using heuristic")
     except LLMUnavailable as exc:
         log.warning("translate_and_summarize: all LLM providers failed – %s", exc)
 
-    return title, {"bullets": [], "source": "heuristic"}
+    # Deterministic fallback produces generic bullets rather than returning empty.
+    from .summarizer import _deterministic_summarize
+    return title, _deterministic_summarize(title, content)
 
 
 _TITLE_ONLY_PROMPT = """\
