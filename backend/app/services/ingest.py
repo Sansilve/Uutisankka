@@ -23,9 +23,11 @@ from ..database import (
     fetch_unscored,
     fetch_untranslated_english,
     get_article_feedback_score,
+    get_llm_cache,
     get_preferences,
     insert_article,
     recent_titles,
+    set_llm_cache,
     update_article_enrichment,
     update_article_score_only,
     update_article_title,
@@ -175,13 +177,22 @@ def enrich_unprocessed_articles() -> int:
     for row in unenriched:
         url = row["url"] or ""
         content = row["content"] or ""
+        content_hash = row["content_hash"]
 
-        if is_english_url(url):
+        # --- Cache lookup ---
+        cached = get_llm_cache(content_hash)
+        if cached:
+            log.debug("enrich_unprocessed_articles: cache hit for %s", url)
+            summary = json.loads(cached["summary_json"])
+            finnish_title = cached["translated_title"]
+        elif is_english_url(url):
             # One LLM call: translate title to Finnish + produce Finnish bullets
             finnish_title, summary = translate_and_summarize(row["title"], content)
+            set_llm_cache(content_hash, json.dumps(summary), finnish_title)
         else:
             finnish_title = None
             summary = summarize_article(row["title"], content, row["source"])
+            set_llm_cache(content_hash, json.dumps(summary), None)
 
         # Score using the (potentially translated) title for better Finnish keyword matching
         score_title = finnish_title or row["title"]

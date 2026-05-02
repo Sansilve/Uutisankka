@@ -77,6 +77,13 @@ def init_db() -> None:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_swipe_history_swiped_at ON swipe_history (swiped_at DESC);
+
+                CREATE TABLE IF NOT EXISTS llm_cache (
+                    content_hash TEXT PRIMARY KEY,
+                    summary_json TEXT NOT NULL,
+                    translated_title TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
                 """
             )
             _ensure_column(conn, "articles", "base_score", "REAL DEFAULT 0")
@@ -268,6 +275,41 @@ def article_exists_with_hash(content_hash: str, limit_hours: int = 96) -> bool:
         conn.close()
 
 
+def get_llm_cache(content_hash: str) -> dict | None:
+    """Return cached LLM result for *content_hash*, or None if not present."""
+    conn = _conn()
+    try:
+        row = conn.execute(
+            "SELECT summary_json, translated_title FROM llm_cache WHERE content_hash = ?",
+            (content_hash,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "summary_json": row["summary_json"],
+            "translated_title": row["translated_title"],
+        }
+    finally:
+        conn.close()
+
+
+def set_llm_cache(content_hash: str, summary_json: str, translated_title: str | None = None) -> None:
+    """Store an LLM result in the cache. Silently replaces any existing entry."""
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO llm_cache (content_hash, summary_json, translated_title)
+                VALUES (?, ?, ?)
+                """,
+                (content_hash, summary_json, translated_title),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def recent_titles(limit: int = 250) -> list[str]:
     conn = _conn()
     try:
@@ -285,7 +327,7 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
     try:
         rows = conn.execute(
             """
-            SELECT id, title, source, published_at, content, url
+            SELECT id, title, source, published_at, content, url, content_hash
             FROM articles
             WHERE summary_json = '{"bullets": []}'
             ORDER BY created_at DESC
