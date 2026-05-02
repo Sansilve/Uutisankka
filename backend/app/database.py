@@ -86,7 +86,7 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "is_paywall", "INTEGER NOT NULL DEFAULT 0")
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
-            _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 0")
+            _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 1")
             _ensure_column(conn, "user_preferences", "excluded_sources", "TEXT NOT NULL DEFAULT '[]'")
             conn.commit()
         finally:
@@ -104,7 +104,7 @@ def upsert_preferences(
     disliked_topics: list[str],
     news_scope: list[str] | None = None,
     local_city: str = "",
-    hide_paywall: bool = False,
+    hide_paywall: bool = True,
     excluded_sources: list[str] | None = None,
     only_if_missing: bool = False,
 ) -> None:
@@ -154,7 +154,7 @@ def get_preferences() -> dict:
                 "disliked_topics": ["viihde", "celebrity"],
                 "news_scope": ["suomi", "maailma"],
                 "local_city": "",
-                "hide_paywall": False,
+                "hide_paywall": True,
                 "excluded_sources": [],
             }
         return {

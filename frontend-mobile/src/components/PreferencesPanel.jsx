@@ -74,7 +74,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
   const [dislikes, setDislikes]   = useState(new Set(preferences.disliked_topics || []))
   const [scope, setScope]         = useState(new Set(preferences.news_scope || ['suomi', 'maailma']))
   const [city, setCity]           = useState(preferences.local_city || '')
-  const [hidePaywall, setHidePaywall] = useState(preferences.hide_paywall || false)
+  const [hidePaywall, setHidePaywall] = useState(preferences.hide_paywall !== false)
   const [excludedSources, setExcludedSources] = useState(new Set(preferences.excluded_sources || []))
   const [saving, setSaving]       = useState(false)
   const [status, setStatus]       = useState('')
