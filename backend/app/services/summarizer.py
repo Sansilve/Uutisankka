@@ -222,16 +222,20 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
         or (len(stripped) < 500 and sentence_count <= 1)
     )
 
-    # Source-aware thresholding to prevent global free-wire false positives.
-    if is_likely_free_source:
-        is_paywall = structural_paywall or has_paywall_word
+    # Global safety rule:
+    # - Mark paywall directly only from hard evidence (keyword/structural match).
+    # - Allow teaser-based paywall only for clearly paywalled sources.
+    hard_paywall = structural_paywall or has_paywall_word
+    if hard_paywall:
+        is_paywall = True
+    elif is_likely_paywalled_source and not is_mixed_tabloid_source:
+        is_paywall = teaser_paywall
     elif is_mixed_tabloid_source:
-        # IS/IL feeds often have very short but free leads. Keep only stricter teaser checks.
-        is_paywall = structural_paywall or has_paywall_word or (len(stripped) < 120 and sentence_count <= 1)
-    elif is_likely_paywalled_source:
-        is_paywall = structural_paywall or has_paywall_word or teaser_paywall
+        # IS/IL feeds often have very short but free leads.
+        is_paywall = len(stripped) < 120 and sentence_count <= 1
     else:
-        is_paywall = structural_paywall or has_paywall_word or (len(stripped) < 180 and sentence_count <= 1)
+        # For free/unknown sources, do not mark paywall from short teaser alone.
+        is_paywall = False
 
     if is_paywall:
         return {"bullets": [], "source": "no_content"}
