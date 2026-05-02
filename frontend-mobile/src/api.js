@@ -2,7 +2,17 @@ import { Platform } from 'react-native'
 
 const LAN_API_BASE = 'http://192.168.10.50:8000'
 
+function normalizeApiBase(url) {
+  if (!url || typeof url !== 'string') return ''
+  return url.trim().replace(/\/+$/, '')
+}
+
 function getApiBase() {
+  const envApiBase = normalizeApiBase(process?.env?.EXPO_PUBLIC_API_BASE)
+  if (envApiBase) {
+    return envApiBase
+  }
+
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     const hostname = window.location.hostname
     if (hostname === 'localhost' || hostname === '127.0.0.1') {

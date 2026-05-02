@@ -1,41 +1,80 @@
-# UutisAnkka - No-BS News Briefing MVP
+# UutisAnkka - No-BS News Briefing
 
-Full-stack MVP that ingests Finnish and international RSS news, removes low-value noise, ranks by relevance, generates concise bullet summaries, and serves a fast daily briefing UI with browser text-to-speech.
+Mobile-first app that ingests Finnish and international RSS news, removes low-value noise, ranks by personal relevance, and serves a concise daily briefing you swipe through in minutes.
+
+## MVP user flow
+
+```
+Onboarding → Daily briefing → Swipe feedback → History → Preferences
+```
+
+1. **Onboarding** — first-time setup: choose news scope (Finland / World / Local), pick interesting and uninteresting topics, select city if local news chosen.
+2. **Daily briefing** — top-ranked articles based on your preferences. Swipe right (relevant) or left (not relevant) to give feedback.
+3. **Swipe feedback** — each swipe is recorded and fed back into the ranking model so the briefing improves over time.
+4. **History** — review previously seen articles grouped by day, filterable by relevance.
+5. **Preferences** — adjust topics, scope, and source filters at any time.
+
+## Out of scope (this MVP)
+
+- User accounts and authentication
+- Premium features or payments
+- Multi-user support
+- Full web feature parity with mobile
 
 ## Stack
 
-- Backend: FastAPI + SQLite
-- RSS parsing: feedparser
-- Frontend: React + Vite
-- TTS: Web Speech API (browser)
-- Summarization: deterministic placeholder summarizer (LLM-ready integration point)
+- **Mobile:** React Native (Expo 54) — primary interface
+- **Backend:** FastAPI + SQLite
+- **RSS parsing:** feedparser (~50 Finnish and international sources)
+- **Summarization:** OpenAI gpt-4o-mini with deterministic fallback
+- **Scoring:** heuristic no-BS model with user feedback loop
+- **Web:** React + Vite (secondary, dev/demo use)
 
-## Features in this MVP
+## What the backend does
 
 - Fetches RSS feeds from Finnish + international sources
-- Stores normalized articles to SQLite
-- Deduplicates by content hash and near-title similarity
-- Scores articles with a No-BS heuristic model:
+- Stores normalized articles to SQLite with content-hash deduplication
+- Scores articles with a no-BS heuristic model:
   - Penalizes clickbait and low-signal patterns
-  - Downranks celebrity/entertainment topics
-  - Boosts politics, technology, economy, and geopolitics
-  - Applies user preference boosts/penalties
-- Generates a daily briefing endpoint with top ranked stories
-- Creates 3-5 bullet factual summaries per story
-- Supports browser TTS playback for top stories and per-article summaries
-- Shows score breakdown per story (why the rank is what it is)
-- Collects user feedback (relevant / not relevant) and feeds it back into ranking
-- Exposes top-N acceptance metric based on feedback votes
+  - Downranks celebrity and entertainment topics
+  - Boosts politics, technology, economy, geopolitics
+  - Applies per-user preference boosts and feedback penalties
+- Generates bullet-point summaries (OpenAI, with deterministic fallback if no API key)
+- Translates international articles to Finnish before summarizing
+- Re-ingests feeds every 30 minutes in the background
+- Records swipe feedback and surfaces it to the ranking model
 
 ## Project structure
 
-- backend/app/main.py: FastAPI app and routes
-- backend/app/database.py: SQLite schema and persistence helpers
-- backend/app/services/ingest.py: RSS ingestion + dedupe + enrichment orchestration
-- backend/app/services/scoring.py: relevance and no-noise scoring
-- backend/app/services/summarizer.py: placeholder high-signal bullet summarizer
-- frontend/src/App.jsx: briefing UI + personalization + TTS controls
-- frontend/src/api.js: API client for backend endpoints
+```
+backend/
+  app/
+    main.py          FastAPI app and all routes
+    database.py      SQLite schema and thread-safe query helpers
+    config.py        RSS feed list, topic weights, regional settings
+    models.py        Pydantic request/response schemas
+    services/
+      ingest.py      RSS fetch, dedup, enrichment orchestration
+      scoring.py     Relevance and no-BS scoring logic
+      summarizer.py  Bullet summary generation (OpenAI + fallback)
+      translator.py  English → Finnish translation for intl sources
+
+frontend-mobile/
+  App.jsx            Screen navigation and top-level state
+  src/
+    api.js           API client (configure base URL via env)
+    components/
+      OnboardingScreen.jsx   First-run setup flow
+      ArticleCard.jsx        Swipe card UI and feedback
+      HistoryScreen.jsx      Previously seen articles
+      PreferencesPanel.jsx   Topic and source settings
+      AllNewsScreen.jsx      Full article list (dev/debug)
+
+frontend/            React + Vite web UI (dev and demo use)
+  src/
+    App.jsx
+    api.js
+```
 
 ## Run locally (Windows Git Bash)
 
@@ -43,11 +82,31 @@ Full-stack MVP that ingests Finnish and international RSS news, removes low-valu
 
 ```bash
 cd /g/UutisAnkka/backend
-C:/Users/silve/AppData/Local/Microsoft/WindowsApps/python3.10.exe -m pip install -r requirements.txt
-C:/Users/silve/AppData/Local/Microsoft/WindowsApps/python3.10.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python3.10 -m pip install -r requirements.txt
+python3.10 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-### 2) Frontend
+Copy `.env.example` to `.env` and add your `OPENAI_API_KEY` to enable LLM summarization. Without it the app falls back to deterministic summaries.
+
+### 2) Mobile (Expo)
+
+```bash
+cd /g/UutisAnkka/frontend-mobile
+npm install
+cp .env.example .env
+npm start
+```
+
+Set `EXPO_PUBLIC_API_BASE` in `frontend-mobile/.env` to switch environment without code changes.
+Examples:
+
+- Local simulator/web: `http://127.0.0.1:8000`
+- Local phone over LAN: `http://192.168.10.50:8000`
+- Demo backend: `https://demo.example.com`
+
+Scan the QR code with Expo Go, or press `w` to open in browser.
+
+### 3) Web (optional)
 
 ```bash
 cd /g/UutisAnkka/frontend
@@ -59,16 +118,16 @@ Open `http://127.0.0.1:5173`.
 
 ## API endpoints
 
-- `GET /api/health`
-- `POST /api/ingest`
-- `GET /api/preferences`
-- `PUT /api/preferences`
-- `GET /api/briefing?limit=10`
-- `POST /api/feedback`
-- `GET /api/metrics?limit=10`
-
-## Notes
-
-- Startup triggers background periodic ingestion every 30 minutes.
-- Summarization is intentionally deterministic placeholder logic for MVP speed.
-- Ready to replace with an LLM summarization provider behind `services/summarizer.py`.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| POST | `/api/ingest` | Trigger RSS fetch manually |
+| GET | `/api/briefing?limit=10` | Top-ranked articles for current preferences |
+| GET | `/api/briefing/random?limit=10` | Random article selection |
+| GET | `/api/preferences` | Get user preference profile |
+| PUT | `/api/preferences` | Update preferences and re-score |
+| POST | `/api/feedback` | Submit swipe feedback for an article |
+| GET | `/api/history?limit=100` | Swipe history |
+| GET | `/api/metrics?limit=10` | Acceptance rate and feedback stats |
+| POST | `/api/admin/reenrich` | Re-score all articles in background |
+| GET | `/api/admin/reenrich/status` | Background job status |
