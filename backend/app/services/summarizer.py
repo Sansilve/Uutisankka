@@ -155,10 +155,23 @@ def summarize_article(title: str, content: str) -> dict[str, list[str]]:
     Tries the OpenAI LLM first; falls back to the deterministic heuristic
     summariser when the API key is absent or the API call fails.
     """
-    # If content is essentially just the title (paywall / no body), don't
-    # fabricate bullets — return a single clean line instead.
+    # If content is essentially just the title repeated (paywall), skip LLM.
+    # We check if the content (stripped) is nearly identical to the title —
+    # not just "short", since a real article can have a short lead sentence.
     stripped = content.strip() if content else ""
-    if len(stripped) < 120 or stripped.lower().replace(" ", "") in title.lower().replace(" ", ""):
+    title_stripped = title.strip()
+    # Normalize both for comparison: lowercase, collapse whitespace
+    def _norm(s: str) -> str:
+        return re.sub(r"\s+", " ", s.lower().strip())
+    norm_content = _norm(stripped)
+    norm_title = _norm(title_stripped)
+    is_paywall = (
+        len(stripped) < 30  # essentially empty
+        or norm_content == norm_title  # content is exactly the title
+        or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
+        or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
+    )
+    if is_paywall:
         return {"bullets": [], "source": "no_content"}
 
     result = _llm_summarize(title, content)
