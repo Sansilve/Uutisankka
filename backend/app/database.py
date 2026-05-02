@@ -732,6 +732,7 @@ def list_articles(
                 a.id,
                 a.title,
                 a.source,
+                a.region,
                 a.published_at,
                 a.url,
                 a.topics,

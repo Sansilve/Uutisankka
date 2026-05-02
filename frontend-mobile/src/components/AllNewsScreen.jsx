@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native'
 import { fetchAllArticles } from '../api'
@@ -34,9 +35,14 @@ export default function AllNewsScreen({ onClose }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [includePaywall, setIncludePaywall] = useState(true)
+  const [paywallFilter, setPaywallFilter] = useState('all') // all | open | paywall
+  const [sourceQuery, setSourceQuery] = useState('')
+  const [regionQuery, setRegionQuery] = useState('')
 
-  useEffect(() => {
-    fetchAllArticles(500)
+  function loadItems(withPaywall) {
+    setLoading(true)
+    fetchAllArticles(500, withPaywall)
       .then((data) => {
         setItems(data.items || [])
         setLoading(false)
@@ -45,7 +51,24 @@ export default function AllNewsScreen({ onClose }) {
         setError(e.message)
         setLoading(false)
       })
+  }
+
+  useEffect(() => {
+    loadItems(true)
   }, [])
+
+  const sourceNorm = sourceQuery.trim().toLowerCase()
+  const regionNorm = regionQuery.trim().toLowerCase()
+
+  const filteredItems = items.filter((item) => {
+    if (paywallFilter === 'open' && item.is_paywall) return false
+    if (paywallFilter === 'paywall' && !item.is_paywall) return false
+
+    if (sourceNorm && !String(item.source || '').toLowerCase().includes(sourceNorm)) return false
+    if (regionNorm && !String(item.region || '').toLowerCase().includes(regionNorm)) return false
+
+    return true
+  })
 
   return (
     <View style={styles.container}>
@@ -61,20 +84,70 @@ export default function AllNewsScreen({ onClose }) {
 
       {!loading && !error && (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ paddingBottom: 40 }}
           renderItem={({ item }) => <AllNewsItem item={item} />}
           ListHeaderComponent={(
-            <View style={styles.metaBar}>
-              <Text style={styles.metaText}>{items.length} artikkelia</Text>
-              <Text style={styles.metaHint}>Uusin ensin, avaa artikkeli painamalla riviä.</Text>
-            </View>
+            <>
+              <View style={styles.metaBar}>
+                <Text style={styles.metaText}>{filteredItems.length} / {items.length} artikkelia</Text>
+                <Text style={styles.metaHint}>Uusin ensin, avaa artikkeli painamalla riviä.</Text>
+              </View>
+
+              <View style={styles.filtersWrap}>
+                <View style={styles.toggleRow}>
+                  <Pressable
+                    style={[styles.toggleBtn, includePaywall && styles.toggleBtnActive]}
+                    onPress={() => {
+                      const next = !includePaywall
+                      setIncludePaywall(next)
+                      loadItems(next)
+                    }}
+                  >
+                    <Text style={[styles.toggleText, includePaywall && styles.toggleTextActive]}>
+                      {includePaywall ? 'Paywall mukana: ON' : 'Paywall mukana: OFF'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.tabs}>
+                  {[
+                    { id: 'all', label: 'Kaikki' },
+                    { id: 'open', label: 'Avoimet' },
+                    { id: 'paywall', label: 'Paywall' },
+                  ].map((f) => (
+                    <Pressable
+                      key={f.id}
+                      style={[styles.tab, paywallFilter === f.id && styles.tabActive]}
+                      onPress={() => setPaywallFilter(f.id)}
+                    >
+                      <Text style={[styles.tabText, paywallFilter === f.id && styles.tabTextActive]}>{f.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <TextInput
+                  value={sourceQuery}
+                  onChangeText={setSourceQuery}
+                  placeholder="Suodata lähteen mukaan (esim. Guardian)"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={regionQuery}
+                  onChangeText={setRegionQuery}
+                  placeholder="Suodata alueen mukaan (esim. maailma, suomi, paikalliset:helsinki)"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.input}
+                />
+              </View>
+            </>
           )}
         />
       )}
 
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && filteredItems.length === 0 && (
         <Text style={styles.emptyText}>Ei artikkeleita juuri nyt.</Text>
       )}
     </View>
@@ -127,6 +200,71 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: '#666',
+  },
+  filtersWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#efefef',
+    gap: 8,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  toggleBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#f8f8f8',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  toggleText: {
+    fontSize: 12,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#ffffff',
+  },
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tab: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 999,
+  },
+  tabActive: {
+    borderColor: '#1a1a1a',
+    backgroundColor: '#1a1a1a',
+  },
+  tabText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#fff',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#111827',
+    backgroundColor: '#fff',
   },
   item: {
     paddingHorizontal: 16,

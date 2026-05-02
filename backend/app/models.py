@@ -106,6 +106,7 @@ class AllNewsItem(BaseModel):
     id: int
     title: str
     source: str
+    region: str
     published_at: datetime | None
     url: str
     topics: List[str]

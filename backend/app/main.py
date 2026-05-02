@@ -278,13 +278,16 @@ def get_history(limit: int = Query(default=100, ge=1, le=500)) -> HistoryRespons
 
 
 @app.get("/api/articles", response_model=AllNewsResponse)
-def get_all_articles(limit: int = Query(default=300, ge=1, le=1000)) -> AllNewsResponse:
+def get_all_articles(
+    limit: int = Query(default=300, ge=1, le=1000),
+    include_paywall: bool = Query(default=False),
+) -> AllNewsResponse:
     """Development endpoint: browse all latest articles, not just swiped or briefing picks."""
     prefs = get_preferences()
     rows = list_articles(
         limit=limit,
         region_filters=_scope_to_regions(prefs),
-        hide_paywall=prefs.get("hide_paywall", True),
+        hide_paywall=False if include_paywall else prefs.get("hide_paywall", True),
         excluded_sources=prefs.get("excluded_sources") or None,
     )
     items: list[AllNewsItem] = []
@@ -294,6 +297,7 @@ def get_all_articles(limit: int = Query(default=300, ge=1, le=1000)) -> AllNewsR
                 id=row["id"],
                 title=row["title"],
                 source=row["source"],
+                region=row["region"],
                 published_at=row["published_at"],
                 url=row["url"],
                 topics=json.loads(row["topics"] or "[]"),
