@@ -11,6 +11,13 @@ from urllib.request import urlopen
 
 import feedparser
 
+try:
+    import trafilatura as _trafilatura
+    _TRAFILATURA_AVAILABLE = True
+except ImportError:
+    _trafilatura = None  # type: ignore[assignment]
+    _TRAFILATURA_AVAILABLE = False
+
 from ..config import DEFAULT_FEEDS, FEED_REGIONS
 
 log = logging.getLogger(__name__)
@@ -38,6 +45,33 @@ from .translator import is_english_url, translate_and_summarize, translate_title
 
 
 TAG_RE = re.compile(r"<[^>]+>")
+
+# Minimum content length to skip web scraping fallback
+_MIN_CONTENT_LENGTH = 150
+
+
+def _scrape_article_content(url: str) -> str:
+    """Try to fetch full article text from the target URL using trafilatura.
+
+    Returns empty string if scraping is unavailable, fails, or yields no content.
+    Respects a short timeout so it doesn't block the enrichment pipeline.
+    """
+    if not _TRAFILATURA_AVAILABLE or not url:
+        return ""
+    try:
+        downloaded = _trafilatura.fetch_url(url)
+        if not downloaded:
+            return ""
+        text = _trafilatura.extract(
+            downloaded,
+            include_comments=False,
+            include_tables=False,
+            no_fallback=False,
+        )
+        return (text or "").strip()
+    except Exception as exc:  # network errors, parse errors, etc.
+        log.debug("_scrape_article_content: failed for %s – %s", url, exc)
+        return ""
 
 
 def _clean(value: str | None) -> str:
@@ -178,6 +212,13 @@ def enrich_unprocessed_articles() -> int:
         url = row["url"] or ""
         content = row["content"] or ""
         content_hash = row["content_hash"]
+
+        # If RSS content is absent or too short to summarise, try scraping the URL.
+        if len(content.strip()) < _MIN_CONTENT_LENGTH and url:
+            scraped = _scrape_article_content(url)
+            if len(scraped) > len(content):
+                log.debug("enrich: scraped %d chars from %s (was %d)", len(scraped), url, len(content))
+                content = scraped
 
         # --- Cache lookup ---
         cached = get_llm_cache(content_hash)
