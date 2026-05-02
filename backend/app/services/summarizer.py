@@ -153,6 +153,13 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     # not just "short", since a real article can have a short lead sentence.
     stripped = content.strip() if content else ""
     title_stripped = title.strip()
+
+    # If content is genuinely absent (RSS feed omits article body), do not treat
+    # as paywall — the article may be freely accessible on the website.
+    # Use a distinct source value so database.py does NOT set is_paywall=1.
+    if not stripped:
+        return {"bullets": [], "source": "empty_feed"}
+
     # Normalize both for comparison: lowercase, collapse whitespace
     def _norm(s: str) -> str:
         return re.sub(r"\s+", " ", s.lower().strip())
@@ -191,10 +198,12 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     sentence_count = len([s for s in re.split(r'[.!?]+', stripped) if len(s.strip()) > 15])
 
     structural_paywall = (
-        len(stripped) < 30  # essentially empty
+        (0 < len(stripped) < 30)  # very short but non-empty — likely truncated paywall
         or norm_content == norm_title  # content is exactly the title
         or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
         or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
+        # Note: len == 0 (empty content) is NOT treated as paywall — RSS feeds may simply
+        # omit article text. Caller handles empty-content articles separately.
     )
 
     teaser_paywall = (
