@@ -58,3 +58,7 @@ export function triggerReenrich() {
 export function fetchReenrichStatus() {
   return request('/api/admin/reenrich/status')
 }
+
+export function fetchHistory(limit = 200) {
+  return request(`/api/history?limit=${limit}`)
+}
