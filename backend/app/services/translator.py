@@ -6,9 +6,12 @@ to Finnish using a single LLM call that also produces bullet summaries.
 This avoids two separate API calls (translate + summarize) per article.
 """
 
-from openai import OpenAI, OpenAIError
+import logging
 
-from ..config import LLM_MODEL, OPENAI_API_KEY
+from ..config import FALLBACK_LLM_API_KEY, OPENAI_API_KEY
+from .llm import LLMUnavailable, chat_with_fallback
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Domains that publish in English — matched against article URL
@@ -41,20 +44,7 @@ def is_english_url(url: str) -> bool:
     return any(domain in url_lower for domain in ENGLISH_DOMAINS)
 
 
-# ---------------------------------------------------------------------------
-# Shared OpenAI client
-# ---------------------------------------------------------------------------
-
-_client: OpenAI | None = None
-
-
-def _get_client() -> OpenAI | None:
-    if not OPENAI_API_KEY:
-        return None
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=OPENAI_API_KEY)
-    return _client
+_LLM_AVAILABLE = bool(OPENAI_API_KEY or FALLBACK_LLM_API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -85,23 +75,17 @@ def translate_and_summarize(
         (finnish_title, summary_dict)  where summary_dict = {"bullets": [...], "source": "llm"}
         On failure, returns the original title and an empty summary dict.
     """
-    client = _get_client()
-    if client is None:
+    if not _LLM_AVAILABLE:
         return title, {"bullets": [], "source": "heuristic"}
 
     user_text = f"Otsikko (englanti): {title}\n\nArtikkeli (englanti): {content[:2500]}"
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_text},
+    ]
 
     try:
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_text},
-            ],
-            max_tokens=450,
-            temperature=0.3,
-        )
-        raw = response.choices[0].message.content.strip()
+        raw = chat_with_fallback(messages, max_tokens=450, temperature=0.3)
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
 
         finnish_title = title  # fallback
@@ -120,8 +104,8 @@ def translate_and_summarize(
         if bullets:
             return finnish_title, {"bullets": bullets[:5], "source": "llm"}
 
-    except OpenAIError:
-        pass
+    except LLMUnavailable as exc:
+        log.warning("translate_and_summarize: all LLM providers failed – %s", exc)
 
     return title, {"bullets": [], "source": "heuristic"}
 
@@ -134,12 +118,10 @@ Vastaa VAIN käännetyllä otsikolla, max 120 merkkiä, ei selityksiä.\
 
 def translate_title(title: str) -> str | None:
     """Translate a single English title to Finnish. Returns None on failure."""
-    client = _get_client()
-    if client is None:
+    if not _LLM_AVAILABLE:
         return None
     try:
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
+        result = chat_with_fallback(
             messages=[
                 {"role": "system", "content": _TITLE_ONLY_PROMPT},
                 {"role": "user", "content": title},
@@ -147,10 +129,9 @@ def translate_title(title: str) -> str | None:
             max_tokens=80,
             temperature=0.2,
         )
-        result = response.choices[0].message.content.strip()
         # Reject if LLM echoed back English or returned garbage
         if result and result != title and len(result) >= 5:
             return result
-    except OpenAIError:
+    except LLMUnavailable:
         pass
     return None

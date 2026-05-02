@@ -10,9 +10,19 @@ load_dotenv(BASE_DIR / ".env")
 
 DB_PATH = BASE_DIR / "news.db"
 
-# LLM settings (OpenAI)
+# LLM settings — primary (OpenAI)
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+# LLM settings — fallback (any OpenAI-compatible endpoint, e.g. Groq)
+# Set FALLBACK_LLM_API_KEY + FALLBACK_LLM_BASE_URL in .env to enable.
+# Example (Groq):
+#   FALLBACK_LLM_API_KEY=gsk_...
+#   FALLBACK_LLM_BASE_URL=https://api.groq.com/openai/v1
+#   FALLBACK_LLM_MODEL=llama-3.1-8b-instant
+FALLBACK_LLM_API_KEY: str = os.getenv("FALLBACK_LLM_API_KEY", "")
+FALLBACK_LLM_BASE_URL: str = os.getenv("FALLBACK_LLM_BASE_URL", "")
+FALLBACK_LLM_MODEL: str = os.getenv("FALLBACK_LLM_MODEL", "llama-3.1-8b-instant")
 
 # Maps feed URL → region tag: "suomi" | "maailma" | "paikalliset:<city>"
 FEED_REGIONS: dict[str, str] = {
