@@ -124,3 +124,33 @@ def translate_and_summarize(
         pass
 
     return title, {"bullets": [], "source": "heuristic"}
+
+
+_TITLE_ONLY_PROMPT = """\
+Käännä seuraava englanninkielinen uutisotsikko suomeksi. \
+Vastaa VAIN käännetyllä otsikolla, max 120 merkkiä, ei selityksiä.\
+"""
+
+
+def translate_title(title: str) -> str | None:
+    """Translate a single English title to Finnish. Returns None on failure."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": _TITLE_ONLY_PROMPT},
+                {"role": "user", "content": title},
+            ],
+            max_tokens=80,
+            temperature=0.2,
+        )
+        result = response.choices[0].message.content.strip()
+        # Reject if LLM echoed back English or returned garbage
+        if result and result != title and len(result) >= 5:
+            return result
+    except OpenAIError:
+        pass
+    return None

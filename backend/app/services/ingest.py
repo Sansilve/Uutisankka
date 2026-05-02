@@ -29,7 +29,7 @@ from ..database import (
 )
 from .scoring import score_article
 from .summarizer import summarize_article
-from .translator import is_english_url, translate_and_summarize
+from .translator import is_english_url, translate_and_summarize, translate_title
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -186,7 +186,7 @@ def translate_existing_english() -> int:
 
     count = 0
     for row in rows:
-        finnish_title, _ = translate_and_summarize(row["title"], row["content"] or "")
+        finnish_title = translate_title(row["title"])
         if finnish_title and finnish_title != row["title"]:
             update_article_title(row["id"], finnish_title)
             count += 1
