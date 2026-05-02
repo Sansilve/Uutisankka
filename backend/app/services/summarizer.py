@@ -199,8 +199,12 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
         "satakunnan", "hameen sanomat", "ksml", "savonsanomat", "kaleva",
         "uusimaa", "esaimaa", "aamuposti", "maaseudun tulevaisuus",
     ]
+    _MIXED_TABLOID_HINTS = [
+        "iltalehti", "ilta-sanomat",
+    ]
     is_likely_free_source = any(h in source_norm for h in _FREE_SOURCE_HINTS)
     is_likely_paywalled_source = any(h in source_norm for h in _PAYWALLED_SOURCE_HINTS)
+    is_mixed_tabloid_source = any(h in source_norm for h in _MIXED_TABLOID_HINTS)
 
     # Count sentences: real articles have multiple sentences
     sentence_count = len([s for s in re.split(r'[.!?]+', stripped) if len(s.strip()) > 15])
@@ -221,6 +225,9 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     # Source-aware thresholding to prevent global free-wire false positives.
     if is_likely_free_source:
         is_paywall = structural_paywall or has_paywall_word
+    elif is_mixed_tabloid_source:
+        # IS/IL feeds often have very short but free leads. Keep only stricter teaser checks.
+        is_paywall = structural_paywall or has_paywall_word or (len(stripped) < 120 and sentence_count <= 1)
     elif is_likely_paywalled_source:
         is_paywall = structural_paywall or has_paywall_word or teaser_paywall
     else:
