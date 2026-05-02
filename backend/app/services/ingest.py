@@ -1,6 +1,7 @@
 import hashlib
 import html
 import json
+import logging
 import re
 from datetime import timezone
 from difflib import SequenceMatcher
@@ -11,6 +12,8 @@ from urllib.request import urlopen
 import feedparser
 
 from ..config import DEFAULT_FEEDS, FEED_REGIONS
+
+log = logging.getLogger(__name__)
 from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
@@ -101,6 +104,7 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
     inserted = 0
     duplicates = 0
 
+    log.info("ingest_feeds: starting, %d feeds", len(feeds))
     titles = recent_titles(limit=300)
 
     for url in feeds:
@@ -108,7 +112,8 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
             with urlopen(url, timeout=8) as response:
                 payload = response.read()
             parsed = feedparser.parse(payload)
-        except (TimeoutError, URLError, OSError):
+        except (TimeoutError, URLError, OSError) as exc:
+            log.warning("ingest_feeds: skipping feed %s – %s", url, exc)
             # Skip sources that are temporarily unavailable instead of blocking ingestion.
             continue
 
@@ -146,6 +151,10 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
                 duplicates += 1
 
     enriched = enrich_unprocessed_articles()
+    log.info(
+        "ingest_feeds: done – fetched=%d inserted=%d duplicates=%d enriched=%d",
+        fetched, inserted, duplicates, enriched,
+    )
     return {
         "fetched": fetched,
         "inserted": inserted,
@@ -159,8 +168,11 @@ def enrich_unprocessed_articles() -> int:
     preferences = get_preferences()
     count = 0
 
+    unenriched = fetch_unenriched(limit=300)
+    log.info("enrich_unprocessed_articles: %d articles to summarise", len(unenriched))
+
     # Step 1: summarise articles that have no summary yet
-    for row in fetch_unenriched(limit=300):
+    for row in unenriched:
         url = row["url"] or ""
         content = row["content"] or ""
 
@@ -188,6 +200,7 @@ def enrich_unprocessed_articles() -> int:
         )
         count += 1
 
+    log.info("enrich_unprocessed_articles: enriched %d articles", count)
     # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
     count += rescore_all(preferences)
     return count
@@ -223,6 +236,7 @@ def rescore_all(preferences: dict | None = None) -> int:
     if not rows:
         return 0
 
+    log.info("rescore_all: rescoring %d articles", len(rows))
     # Fetch all feedback scores in ONE query instead of one per article
     feedback_scores = batch_fetch_feedback_scores()
 
