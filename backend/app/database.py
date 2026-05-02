@@ -159,17 +159,28 @@ def get_preferences() -> dict:
         conn.close()
 
 
-def random_briefing(limit: int = 10, region_filters: list[str] | None = None) -> list:
+def random_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None) -> list:
     """Return *limit* random enriched articles (score > 0), shuffled each call."""
     conn = _conn()
     try:
+        params: list = []
+        where_region = ""
         if region_filters:
             placeholders = ",".join("?" * len(region_filters))
             where_region = f"AND a.region IN ({placeholders})"
-            params: tuple = tuple(region_filters) + (limit,)
-        else:
-            where_region = ""
-            params = (limit,)
+            params.extend(region_filters)
+
+        where_dislikes = ""
+        if disliked_topics:
+            dp = ",".join("?" * len(disliked_topics))
+            where_dislikes = f"""
+              AND NOT EXISTS (
+                  SELECT 1 FROM json_each(a.topics)
+                  WHERE json_each.value IN ({dp})
+              )"""
+            params.extend(disliked_topics)
+
+        params.append(limit)
         rows = conn.execute(
             f"""
             SELECT
@@ -182,6 +193,7 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None) ->
             LEFT JOIN article_feedback f ON f.article_id = a.id
             WHERE a.score > 0
               {where_region}
+              {where_dislikes}
             ORDER BY RANDOM()
             LIMIT ?
             """,
@@ -571,16 +583,27 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
             conn.close()
 
 
-def top_briefing(limit: int = 10, region_filters: list[str] | None = None) -> list[sqlite3.Row]:
+def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None) -> list[sqlite3.Row]:
     conn = _conn()
     try:
+        params: list = []
+        where_region = ""
         if region_filters:
             placeholders = ",".join("?" * len(region_filters))
             where_region = f"AND a.region IN ({placeholders})"
-            params: tuple = tuple(region_filters) + (limit,)
-        else:
-            where_region = ""
-            params = (limit,)
+            params.extend(region_filters)
+
+        where_dislikes = ""
+        if disliked_topics:
+            dp = ",".join("?" * len(disliked_topics))
+            where_dislikes = f"""
+              AND NOT EXISTS (
+                  SELECT 1 FROM json_each(a.topics)
+                  WHERE json_each.value IN ({dp})
+              )"""
+            params.extend(disliked_topics)
+
+        params.append(limit)
         return conn.execute(
             f"""
             SELECT
@@ -603,6 +626,7 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None) -> li
               AND (a.published_at IS NULL
                    OR datetime(a.published_at) >= datetime('now', '-48 hours'))
               {where_region}
+              {where_dislikes}
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,

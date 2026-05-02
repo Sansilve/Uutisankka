@@ -184,13 +184,21 @@ def _scope_to_regions(prefs: dict) -> list[str] | None:
 @app.get("/api/briefing", response_model=BriefingResponse)
 def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
     prefs = get_preferences()
-    return _rows_to_briefing(top_briefing(limit, region_filters=_scope_to_regions(prefs)))
+    return _rows_to_briefing(top_briefing(
+        limit,
+        region_filters=_scope_to_regions(prefs),
+        disliked_topics=prefs.get("disliked_topics") or None,
+    ))
 
 
 @app.get("/api/briefing/random", response_model=BriefingResponse)
 def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
     prefs = get_preferences()
-    return _rows_to_briefing(random_briefing(limit, region_filters=_scope_to_regions(prefs)))
+    return _rows_to_briefing(random_briefing(
+        limit,
+        region_filters=_scope_to_regions(prefs),
+        disliked_topics=prefs.get("disliked_topics") or None,
+    ))
 
 
 @app.post("/api/admin/reenrich")
