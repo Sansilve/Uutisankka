@@ -356,25 +356,45 @@ def update_article_enrichment(
     topics: list[str],
     summary: dict[str, Any],
     score_breakdown: dict[str, Any],
+    translated_title: str | None = None,
 ) -> None:
     with _db_lock:
         conn = _conn()
         try:
-            conn.execute(
-                """
-                UPDATE articles
-                SET base_score = ?, score = ?, topics = ?, summary_json = ?, score_breakdown_json = ?
-                WHERE id = ?
-                """,
-                (
-                    base_score,
-                    total_score,
-                    json.dumps(topics),
-                    json.dumps(summary),
-                    json.dumps(score_breakdown),
-                    article_id,
-                ),
-            )
+            if translated_title:
+                conn.execute(
+                    """
+                    UPDATE articles
+                    SET title = ?, base_score = ?, score = ?, topics = ?,
+                        summary_json = ?, score_breakdown_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        translated_title,
+                        base_score,
+                        total_score,
+                        json.dumps(topics),
+                        json.dumps(summary),
+                        json.dumps(score_breakdown),
+                        article_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE articles
+                    SET base_score = ?, score = ?, topics = ?, summary_json = ?, score_breakdown_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        base_score,
+                        total_score,
+                        json.dumps(topics),
+                        json.dumps(summary),
+                        json.dumps(score_breakdown),
+                        article_id,
+                    ),
+                )
             conn.commit()
         finally:
             conn.close()

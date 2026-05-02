@@ -27,6 +27,7 @@ from ..database import (
 )
 from .scoring import score_article
 from .summarizer import summarize_article
+from .translator import is_english_url, translate_and_summarize
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -136,18 +137,30 @@ def enrich_unprocessed_articles() -> int:
 
     # Step 1: summarise articles that have no summary yet
     for row in fetch_unenriched(limit=300):
+        url = row["url"] or ""
+        content = row["content"] or ""
+
+        if is_english_url(url):
+            # One LLM call: translate title to Finnish + produce Finnish bullets
+            finnish_title, summary = translate_and_summarize(row["title"], content)
+        else:
+            finnish_title = None
+            summary = summarize_article(row["title"], content)
+
+        # Score using the (potentially translated) title for better Finnish keyword matching
+        score_title = finnish_title or row["title"]
         base_score, topics, breakdown_items = score_article(
-            title=row["title"],
-            content=row["content"] or "",
+            title=score_title,
+            content=content,
             source=row["source"],
             published_at=row["published_at"],
             preferences=preferences,
         )
         feedback_score = get_article_feedback_score(row["id"])
         total_score = round(base_score + feedback_score, 2)
-        summary = summarize_article(row["title"], row["content"] or "")
         update_article_enrichment(
-            row["id"], base_score, total_score, topics, summary, {"items": breakdown_items}
+            row["id"], base_score, total_score, topics, summary,
+            {"items": breakdown_items}, translated_title=finnish_title,
         )
         count += 1
 
