@@ -17,7 +17,7 @@ const NEWS_SCOPES = [
   { id: 'paikalliset', label: 'Paikalliset', desc: 'Oman kaupungin uutiset' },
 ]
 
-const STEPS = ['welcome', 'interests', 'dislikes_scope', 'done']
+const STEPS = ['welcome', 'scope', 'interests', 'dislikes']
 
 export default function OnboardingScreen({ onComplete }) {
   const { width } = useWindowDimensions()
@@ -33,8 +33,7 @@ export default function OnboardingScreen({ onComplete }) {
   function toggleInterest(id) {
     const next = new Set(interests)
     next.has(id) ? next.delete(id) : next.add(id)
-    // Remove from dislikes if added
-    if (!next.has(id) === false) {
+    if (next.has(id)) {
       const nd = new Set(dislikes)
       nd.delete(id)
       setDislikes(nd)
@@ -45,7 +44,7 @@ export default function OnboardingScreen({ onComplete }) {
   function toggleDislike(id) {
     const next = new Set(dislikes)
     next.has(id) ? next.delete(id) : next.add(id)
-    if (!next.has(id) === false) {
+    if (next.has(id)) {
       const ni = new Set(interests)
       ni.delete(id)
       setInterests(ni)
@@ -82,6 +81,7 @@ export default function OnboardingScreen({ onComplete }) {
   }
 
   const currentStep = STEPS[step]
+  const totalSteps = STEPS.length - 1 // exclude welcome
 
   return (
     <View style={styles.root}>
@@ -91,9 +91,9 @@ export default function OnboardingScreen({ onComplete }) {
         <Text style={styles.brand}>🦆 UutisAnkka</Text>
         <View style={styles.brandRule} />
 
-        {/* Step indicator */}
+        {/* Step indicator (dots for steps 1-3, hidden on welcome) */}
         <View style={styles.stepDots}>
-          {STEPS.slice(1).map((_, i) => (
+          {step > 0 && STEPS.slice(1).map((_, i) => (
             <View key={i} style={[styles.dot, step - 1 >= i && styles.dotActive]} />
           ))}
         </View>
@@ -105,7 +105,7 @@ export default function OnboardingScreen({ onComplete }) {
             <Text style={styles.heading}>Päivittäinen{'\n'}uutiskierros{'\n'}sinulle.</Text>
             <Text style={styles.body}>
               UutisAnkka kokoaa joka päivä parhaat uutiset kiinnostustesi mukaan.
-              Kerro ensin mistä aiheista pidät — ja mistä et.
+              Käydään läpi muutama kysymys niin päästään heti asiaan.
             </Text>
             <Pressable style={styles.primaryBtn} onPress={() => setStep(1)}>
               <Text style={styles.primaryBtnText}>Aloita →</Text>
@@ -113,70 +113,13 @@ export default function OnboardingScreen({ onComplete }) {
           </View>
         )}
 
-        {/* ── Step 1: Interests ── */}
-        {currentStep === 'interests' && (
+        {/* ── Step 1: Scope ── */}
+        {currentStep === 'scope' && (
           <View style={styles.stepContent}>
-            <Text style={styles.eyebrow}>VAIHE 1 / 2</Text>
-            <Text style={styles.heading}>Mitä haluat{'\n'}lukea?</Text>
-            <Text style={styles.body}>Valitse vähintään yksi aihe. Voit muuttaa valintoja myöhemmin.</Text>
-            <View style={styles.chips}>
-              {ALL_TOPICS.map((c) => {
-                const active = interests.has(c.id)
-                const blocked = dislikes.has(c.id)
-                return (
-                  <Pressable
-                    key={c.id}
-                    style={[styles.chip, active && styles.chipActive, blocked && styles.chipBlocked]}
-                    onPress={() => !blocked && toggleInterest(c.id)}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {c.label}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-            <View style={styles.navRow}>
-              <Pressable style={styles.secondaryBtn} onPress={() => setStep(0)}>
-                <Text style={styles.secondaryBtnText}>← Takaisin</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.primaryBtn, interests.size === 0 && styles.primaryBtnDisabled]}
-                onPress={() => interests.size > 0 && setStep(2)}
-              >
-                <Text style={styles.primaryBtnText}>Seuraava →</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
+            <Text style={styles.eyebrow}>VAIHE 1 / {totalSteps}</Text>
+            <Text style={styles.heading}>Mistä uutiset?</Text>
+            <Text style={styles.body}>Valitse alueet joista haluat uutisia.</Text>
 
-        {/* ── Step 2: Dislikes + Scope ── */}
-        {currentStep === 'dislikes_scope' && (
-          <View style={styles.stepContent}>
-            <Text style={styles.eyebrow}>VAIHE 2 / 2</Text>
-            <Text style={styles.heading}>Mitä haluat{'\n'}välttää?</Text>
-            <Text style={styles.body}>
-              Valitut aiheet harmaantuvat kiinnostaa-listalta automaattisesti.
-            </Text>
-            <View style={styles.chips}>
-              {ALL_TOPICS.map((c) => {
-                const active  = dislikes.has(c.id)
-                const blocked = interests.has(c.id)
-                return (
-                  <Pressable
-                    key={c.id}
-                    style={[styles.chip, styles.chipDislikeBase, active && styles.chipDislikeActive, blocked && styles.chipBlocked]}
-                    onPress={() => !blocked && toggleDislike(c.id)}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {c.label}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-
-            <Text style={styles.sectionLabel}>Uutisalue</Text>
             <View style={styles.scopeRow}>
               {NEWS_SCOPES.map((s) => (
                 <Pressable
@@ -214,7 +157,81 @@ export default function OnboardingScreen({ onComplete }) {
             )}
 
             <View style={styles.navRow}>
+              <Pressable style={styles.secondaryBtn} onPress={() => setStep(0)}>
+                <Text style={styles.secondaryBtnText}>← Takaisin</Text>
+              </Pressable>
+              <Pressable style={styles.primaryBtn} onPress={() => setStep(2)}>
+                <Text style={styles.primaryBtnText}>Seuraava →</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* ── Step 2: Interests ── */}
+        {currentStep === 'interests' && (
+          <View style={styles.stepContent}>
+            <Text style={styles.eyebrow}>VAIHE 2 / {totalSteps}</Text>
+            <Text style={styles.heading}>Mistä aiheista{'\n'}pidät?</Text>
+            <Text style={styles.body}>Valitse vähintään yksi aihe. Voit muuttaa valintoja myöhemmin.</Text>
+            <View style={styles.chips}>
+              {ALL_TOPICS.map((c) => {
+                const active  = interests.has(c.id)
+                const blocked = dislikes.has(c.id)
+                return (
+                  <Pressable
+                    key={c.id}
+                    style={[styles.chip, active && styles.chipActive, blocked && styles.chipBlocked]}
+                    onPress={() => !blocked && toggleInterest(c.id)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {c.label}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+            <View style={styles.navRow}>
               <Pressable style={styles.secondaryBtn} onPress={() => setStep(1)}>
+                <Text style={styles.secondaryBtnText}>← Takaisin</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primaryBtn, interests.size === 0 && styles.primaryBtnDisabled]}
+                onPress={() => interests.size > 0 && setStep(3)}
+              >
+                <Text style={styles.primaryBtnText}>Seuraava →</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* ── Step 3: Dislikes ── */}
+        {currentStep === 'dislikes' && (
+          <View style={styles.stepContent}>
+            <Text style={styles.eyebrow}>VAIHE 3 / {totalSteps}</Text>
+            <Text style={styles.heading}>Mitä haluat{'\n'}välttää?</Text>
+            <Text style={styles.body}>
+              Valinnaiset. Kiinnostaa-listalla olevat aiheet eivät ole valittavissa.
+            </Text>
+            <View style={styles.chips}>
+              {ALL_TOPICS.map((c) => {
+                const active  = dislikes.has(c.id)
+                const blocked = interests.has(c.id)
+                return (
+                  <Pressable
+                    key={c.id}
+                    style={[styles.chip, styles.chipDislikeBase, active && styles.chipDislikeActive, blocked && styles.chipBlocked]}
+                    onPress={() => !blocked && toggleDislike(c.id)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {c.label}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+
+            <View style={styles.navRow}>
+              <Pressable style={styles.secondaryBtn} onPress={() => setStep(2)}>
                 <Text style={styles.secondaryBtnText}>← Takaisin</Text>
               </Pressable>
               <Pressable
