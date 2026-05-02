@@ -77,3 +77,21 @@ class MetricsResponse(BaseModel):
     top_limit: int
     total_feedback_votes: int
     positive_feedback_ratio: float | None
+
+
+class SwipeHistoryItem(BaseModel):
+    swipe_id: int
+    is_relevant: bool
+    swiped_at: datetime
+    id: int
+    title: str
+    source: str
+    published_at: datetime | None
+    url: str
+    topics: List[str]
+    summary: SummaryPayload
+
+
+class HistoryResponse(BaseModel):
+    total: int
+    items: List[SwipeHistoryItem]

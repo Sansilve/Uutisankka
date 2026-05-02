@@ -67,6 +67,16 @@ def init_db() -> None:
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS swipe_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    article_id INTEGER NOT NULL,
+                    is_relevant INTEGER NOT NULL,
+                    swiped_at TEXT NOT NULL,
+                    FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_swipe_history_swiped_at ON swipe_history (swiped_at DESC);
                 """
             )
             _ensure_column(conn, "articles", "base_score", "REAL DEFAULT 0")
@@ -522,6 +532,14 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
                     (article_id, positive, negative, timestamp),
                 )
 
+            conn.execute(
+                """
+                INSERT INTO swipe_history (article_id, is_relevant, swiped_at)
+                VALUES (?, ?, ?)
+                """,
+                (article_id, 1 if is_relevant else 0, timestamp),
+            )
+
             net_votes = positive - negative
             feedback_score = round(max(-4.0, min(4.0, net_votes * 0.8)), 2)
 
@@ -589,6 +607,33 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None) -> li
             LIMIT ?
             """,
             params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_swipe_history(limit: int = 100) -> list[sqlite3.Row]:
+    conn = _conn()
+    try:
+        return conn.execute(
+            """
+            SELECT
+                sh.id AS swipe_id,
+                sh.is_relevant,
+                sh.swiped_at,
+                a.id,
+                a.title,
+                a.source,
+                a.published_at,
+                a.url,
+                a.topics,
+                a.summary_json
+            FROM swipe_history sh
+            JOIN articles a ON a.id = sh.article_id
+            ORDER BY sh.swiped_at DESC
+            LIMIT ?
+            """,
+            (limit,),
         ).fetchall()
     finally:
         conn.close()
