@@ -30,7 +30,7 @@ from .models import (
     ScoreBreakdownPayload,
     SummaryPayload,
 )
-from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics
+from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics, translate_existing_english
 
 import threading
 
@@ -54,6 +54,8 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_default_preferences()
     enrich_unprocessed_articles()
+    # Translate any English articles that were stored before this feature was added
+    asyncio.get_event_loop().run_in_executor(None, translate_existing_english)
     background_task = asyncio.create_task(periodic_ingest())
     yield
     if background_task:
@@ -66,7 +68,13 @@ app = FastAPI(title="No-BS Finnish News Briefing", version="0.1.0", lifespan=lif
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://192.168.10.50:8081",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

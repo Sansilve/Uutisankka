@@ -18,15 +18,18 @@ from ..database import (
     fetch_articles_by_topics,
     fetch_unenriched,
     fetch_unscored,
+    fetch_untranslated_english,
     get_article_feedback_score,
     get_preferences,
     insert_article,
     recent_titles,
     update_article_enrichment,
     update_article_score_only,
+    update_article_title,
 )
 from .scoring import score_article
 from .summarizer import summarize_article
+from .translator import is_english_url, translate_and_summarize, translate_title
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -136,23 +139,57 @@ def enrich_unprocessed_articles() -> int:
 
     # Step 1: summarise articles that have no summary yet
     for row in fetch_unenriched(limit=300):
+        url = row["url"] or ""
+        content = row["content"] or ""
+
+        if is_english_url(url):
+            # One LLM call: translate title to Finnish + produce Finnish bullets
+            finnish_title, summary = translate_and_summarize(row["title"], content)
+        else:
+            finnish_title = None
+            summary = summarize_article(row["title"], content)
+
+        # Score using the (potentially translated) title for better Finnish keyword matching
+        score_title = finnish_title or row["title"]
         base_score, topics, breakdown_items = score_article(
-            title=row["title"],
-            content=row["content"] or "",
+            title=score_title,
+            content=content,
             source=row["source"],
             published_at=row["published_at"],
             preferences=preferences,
         )
         feedback_score = get_article_feedback_score(row["id"])
         total_score = round(base_score + feedback_score, 2)
-        summary = summarize_article(row["title"], row["content"] or "")
         update_article_enrichment(
-            row["id"], base_score, total_score, topics, summary, {"items": breakdown_items}
+            row["id"], base_score, total_score, topics, summary,
+            {"items": breakdown_items}, translated_title=finnish_title,
         )
         count += 1
 
     # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
     count += rescore_all(preferences)
+    return count
+
+
+def translate_existing_english() -> int:
+    """Translate titles of already-enriched English articles that are still in English.
+    Runs once after a backend upgrade; safe to call multiple times (idempotent-ish)."""
+    from ..database import _conn
+    conn = _conn()
+    all_urls = [r["url"] for r in conn.execute("SELECT url FROM articles").fetchall()]
+    conn.close()
+
+    english_urls = [u for u in all_urls if u and is_english_url(u)]
+    rows = fetch_untranslated_english(english_urls)
+    if not rows:
+        return 0
+
+    count = 0
+    for row in rows:
+        finnish_title = translate_title(row["title"])
+        if finnish_title and finnish_title != row["title"]:
+            update_article_title(row["id"], finnish_title)
+            count += 1
     return count
 
 
