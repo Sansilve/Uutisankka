@@ -34,6 +34,7 @@ export const LOCAL_CITIES = {
   tampere: 'Tampere',
   oulu: 'Oulu',
   turku: 'Turku',
+  helsinki: 'Helsinki',
 }
 
 export const ALL_SOURCES = [

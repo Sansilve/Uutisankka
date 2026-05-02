@@ -18,6 +18,9 @@ LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
 FEED_REGIONS: dict[str, str] = {
     # Finland national
     "https://yle.fi/uutiset/rss": "suomi",
+    "https://yle.fi/rss/uutiset/paauutiset": "suomi",
+    "https://yle.fi/rss/uutiset/tuoreimmat": "suomi",
+    "https://yle.fi/rss/urheilu": "suomi",
     "https://www.hs.fi/rss/tuoreimmat.xml": "suomi",
     "https://www.iltalehti.fi/rss/uutiset.xml": "suomi",
     "https://www.is.fi/rss/tuoreimmat.xml": "suomi",
@@ -37,9 +40,13 @@ FEED_REGIONS: dict[str, str] = {
     # Local: Oulu
     "https://www.kaleva.fi/rss/uutiset": "paikalliset:oulu",
     "https://feeds.yle.fi/uutiset/rss/yle-oulu.rss": "paikalliset:oulu",
+    "https://feeds.yle.fi/uutiset/rss/yle-lappi.rss": "paikalliset:oulu",
+    "https://feeds.yle.fi/uutiset/rss/yle-pohjanmaa.rss": "paikalliset:oulu",
     # Local: Turku
     "https://www.satakunnankansa.fi/rss/tuoreimmat.xml": "paikalliset:turku",
     "https://feeds.yle.fi/uutiset/rss/yle-lounainen-suomi.rss": "paikalliset:turku",
+    # Local: Helsinki
+    "https://feeds.yle.fi/uutiset/rss/yle-uusimaa.rss": "paikalliset:helsinki",
     # International
     "https://feeds.bbci.co.uk/news/world/rss.xml": "maailma",
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml": "maailma",
@@ -56,6 +63,7 @@ LOCAL_CITIES: dict[str, str] = {
     "tampere": "Tampere",
     "oulu": "Oulu",
     "turku": "Turku",
+    "helsinki": "Helsinki",
 }
 
 MAJOR_SOURCES = {
