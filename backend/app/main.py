@@ -43,11 +43,11 @@ _reenrich_status: dict[str, str | int] = {"state": "idle", "enriched": 0}
 
 
 async def periodic_ingest() -> None:
+    loop = asyncio.get_event_loop()
     while True:
         try:
-            ingest_feeds()
+            await loop.run_in_executor(None, ingest_feeds)
         except Exception:
-            # Keep the loop alive even if one feed cycle fails.
             pass
         await asyncio.sleep(30 * 60)
 
@@ -57,9 +57,6 @@ async def lifespan(app: FastAPI):
     global background_task
     init_db()
     ensure_default_preferences()
-    enrich_unprocessed_articles()
-    # Translate any English articles that were stored before this feature was added
-    asyncio.get_event_loop().run_in_executor(None, translate_existing_english)
     background_task = asyncio.create_task(periodic_ingest())
     yield
     if background_task:
