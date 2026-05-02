@@ -26,6 +26,7 @@ ENGLISH_DOMAINS: frozenset[str] = frozenset(
         "theguardian.com",
         "washingtonpost.com",
         "aljazeera.com",
+        "aljazeera.net",
         "reuters.com",
         "reutersagency.com",
         "apnews.com",
@@ -34,6 +35,15 @@ ENGLISH_DOMAINS: frozenset[str] = frozenset(
         "economist.com",
         "politico.com",
         "foreignpolicy.com",
+        "cnn.com",
+        "skynews.com",
+        "sky.com",
+        "dw.com",
+        "euronews.com",
+        "npr.org",
+        "france24.com",
+        "rfi.fr",
+        "finlandtoday.fi",
     ]
 )
 
