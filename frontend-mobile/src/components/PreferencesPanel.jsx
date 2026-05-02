@@ -36,6 +36,30 @@ export const LOCAL_CITIES = {
   turku: 'Turku',
 }
 
+export const ALL_SOURCES = [
+  'yle.fi',
+  'hs.fi',
+  'iltalehti.fi',
+  'is.fi',
+  'verkkouutiset.fi',
+  'uusisuomi.fi',
+  'maaseuduntulevaisuus.fi',
+  'kauppalehti.fi',
+  'talouselama.fi',
+  'arvopaperi.fi',
+  'mikrobitti.fi',
+  'tekniikkatalous.fi',
+  'aamulehti.fi',
+  'kaleva.fi',
+  'satakunnankansa.fi',
+  'bbc.co.uk',
+  'nytimes.com',
+  'theguardian.com',
+  'washingtonpost.com',
+  'aljazeera.com',
+  'reutersagency.com',
+]
+
 const NEWS_SCOPES = [
   { id: 'suomi',       label: 'Suomi' },
   { id: 'maailma',     label: 'Maailma' },
@@ -51,6 +75,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
   const [scope, setScope]         = useState(new Set(preferences.news_scope || ['suomi', 'maailma']))
   const [city, setCity]           = useState(preferences.local_city || '')
   const [hidePaywall, setHidePaywall] = useState(preferences.hide_paywall || false)
+  const [excludedSources, setExcludedSources] = useState(new Set(preferences.excluded_sources || []))
   const [saving, setSaving]       = useState(false)
   const [status, setStatus]       = useState('')
   const [unsaved, setUnsaved]     = useState(false)
@@ -97,6 +122,17 @@ export default function PreferencesPanel({ preferences, onSaved }) {
     setUnsaved(true)
   }
 
+  function toggleSource(id) {
+    const next = new Set(excludedSources)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    setExcludedSources(next)
+    setUnsaved(true)
+  }
+
   async function pollReenrich() {
     const MAX_WAIT = 60_000
     const start = Date.now()
@@ -129,6 +165,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
         news_scope: [...scope],
         local_city: city,
         hide_paywall: hidePaywall,
+        excluded_sources: [...excludedSources],
       })
       setUnsaved(false)
       setStatus('Tallennettu – pisteytetään...')
@@ -237,6 +274,25 @@ export default function PreferencesPanel({ preferences, onSaved }) {
             <View style={[styles.toggleThumb, hidePaywall && styles.toggleThumbOn]} />
           </View>
         </TouchableOpacity>
+
+        <Text style={styles.sectionLabel}>Uutislähteet</Text>
+        <Text style={styles.hint}>Valitsemasi lähteet piilotetaan – poista valinta näyttääksesi kaikki</Text>
+        <View style={styles.chips}>
+          {ALL_SOURCES.map((src) => {
+            const excluded = excludedSources.has(src)
+            return (
+              <TouchableOpacity
+                key={src}
+                style={[styles.chip, excluded && styles.chipDislikeActive]}
+                onPress={() => toggleSource(src)}
+              >
+                <Text style={[styles.chipText, excluded && styles.chipTextActive]}>
+                  {src}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
 
         <TouchableOpacity
           style={[styles.saveBtn, (!unsaved || saving) && styles.saveBtnDisabled]}

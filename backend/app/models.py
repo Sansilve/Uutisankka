@@ -10,6 +10,7 @@ class PreferenceProfile(BaseModel):
     news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
     local_city: str = ""
     hide_paywall: bool = False
+    excluded_sources: List[str] = Field(default_factory=list)
 
 
 class PreferenceUpdate(BaseModel):
@@ -18,6 +19,7 @@ class PreferenceUpdate(BaseModel):
     news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
     local_city: str = ""
     hide_paywall: bool = False
+    excluded_sources: List[str] = Field(default_factory=list)
 
 
 class SummaryPayload(BaseModel):

@@ -109,6 +109,7 @@ def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTa
         news_scope=payload.news_scope,
         local_city=payload.local_city,
         hide_paywall=payload.hide_paywall,
+        excluded_sources=payload.excluded_sources,
     )
     new_prefs = get_preferences()
     changed_topics = _diff_topics(old_prefs, new_prefs)
@@ -191,6 +192,7 @@ def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingRespons
         region_filters=_scope_to_regions(prefs),
         disliked_topics=prefs.get("disliked_topics") or None,
         hide_paywall=prefs.get("hide_paywall", False),
+        excluded_sources=prefs.get("excluded_sources") or None,
     ))
 
 
@@ -202,6 +204,7 @@ def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> Briefing
         region_filters=_scope_to_regions(prefs),
         disliked_topics=prefs.get("disliked_topics") or None,
         hide_paywall=prefs.get("hide_paywall", False),
+        excluded_sources=prefs.get("excluded_sources") or None,
     ))
 
 

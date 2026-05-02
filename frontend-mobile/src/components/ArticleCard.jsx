@@ -227,6 +227,8 @@ export default function ArticleCard({
 
           <View style={styles.titleRule} />
 
+          <Text style={styles.sourceText}>📰 {story.source}</Text>
+
           <Text style={[styles.lead, isCompact && styles.leadCompact]}>{lead}</Text>
 
           <Pressable style={styles.whyToggle} onPress={() => setExpanded((v) => !v)}>
@@ -461,6 +463,13 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: '#1a1a1a',
     marginBottom: 14,
+  },
+  sourceText: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 12,
+    letterSpacing: 0.3,
   },
   lead: {
     color: '#1a1a1a',

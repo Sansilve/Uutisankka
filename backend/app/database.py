@@ -87,6 +87,7 @@ def init_db() -> None:
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 0")
+            _ensure_column(conn, "user_preferences", "excluded_sources", "TEXT NOT NULL DEFAULT '[]'")
             conn.commit()
         finally:
             conn.close()
@@ -104,6 +105,7 @@ def upsert_preferences(
     news_scope: list[str] | None = None,
     local_city: str = "",
     hide_paywall: bool = False,
+    excluded_sources: list[str] | None = None,
     only_if_missing: bool = False,
 ) -> None:
     with _db_lock:
@@ -116,23 +118,24 @@ def upsert_preferences(
                 return
 
             scope = news_scope if news_scope is not None else ["suomi", "maailma"]
+            sources = excluded_sources if excluded_sources is not None else []
             timestamp = datetime.utcnow().isoformat()
             if existing:
                 conn.execute(
                     """
                     UPDATE user_preferences
-                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, updated_at = ?
+                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, excluded_sources = ?, updated_at = ?
                     WHERE user_id = 1
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), timestamp),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, updated_at)
-                    VALUES (1, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), timestamp),
                 )
             conn.commit()
         finally:
@@ -143,7 +146,7 @@ def get_preferences() -> dict:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall FROM user_preferences WHERE user_id = 1"
+            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources FROM user_preferences WHERE user_id = 1"
         ).fetchone()
         if not row:
             return {
@@ -152,6 +155,7 @@ def get_preferences() -> dict:
                 "news_scope": ["suomi", "maailma"],
                 "local_city": "",
                 "hide_paywall": False,
+                "excluded_sources": [],
             }
         return {
             "interests": json.loads(row["interests"]),
@@ -159,12 +163,13 @@ def get_preferences() -> dict:
             "news_scope": json.loads(row["news_scope"] or '["suomi","maailma"]'),
             "local_city": row["local_city"] or "",
             "hide_paywall": bool(row["hide_paywall"]),
+            "excluded_sources": json.loads(row["excluded_sources"] or '[]'),
         }
     finally:
         conn.close()
 
 
-def random_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False) -> list:
+def random_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list:
     """Return *limit* random enriched articles (score > 0), shuffled each call."""
     conn = _conn()
     try:
@@ -186,6 +191,12 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
             params.extend(disliked_topics)
 
         where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+        
+        where_sources = ""
+        if excluded_sources:
+            sp = ",".join("?" * len(excluded_sources))
+            where_sources = f"AND a.source NOT IN ({sp})"
+            params.extend(excluded_sources)
 
         params.append(limit)
         rows = conn.execute(
@@ -203,6 +214,7 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
               {where_region}
               {where_dislikes}
               {where_paywall}
+              {where_sources}
             ORDER BY RANDOM()
             LIMIT ?
             """,
@@ -595,7 +607,7 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
             conn.close()
 
 
-def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False) -> list[sqlite3.Row]:
+def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list[sqlite3.Row]:
     conn = _conn()
     try:
         params: list = []
@@ -616,6 +628,12 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
             params.extend(disliked_topics)
 
         where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+
+        where_sources = ""
+        if excluded_sources:
+            sp = ",".join("?" * len(excluded_sources))
+            where_sources = f"AND a.source NOT IN ({sp})"
+            params.extend(excluded_sources)
 
         params.append(limit)
         return conn.execute(
@@ -643,6 +661,7 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
               {where_region}
               {where_dislikes}
               {where_paywall}
+              {where_sources}
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,
