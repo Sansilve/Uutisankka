@@ -27,6 +27,12 @@ FEED_REGIONS: dict[str, str] = {
     "https://www.verkkouutiset.fi/feed/": "suomi",
     "https://www.uusisuomi.fi/feed/": "suomi",
     "https://www.maaseuduntulevaisuus.fi/rss": "suomi",
+    # Finland national – English
+    "https://finlandtoday.fi/feed": "suomi",
+    "https://helsinkitimes.fi/?format=feed": "suomi",
+    # Finland national – Finnish
+    "https://ku.fi/feed": "suomi",
+    "https://aamuposti.fi/feed/rss": "suomi",
     # Finland economy
     "https://www.kauppalehti.fi/rss/etusivu": "suomi",
     "https://www.talouselama.fi/rss/tuoreimmat": "suomi",
@@ -37,6 +43,18 @@ FEED_REGIONS: dict[str, str] = {
     # Local: Tampere
     "https://www.aamulehti.fi/rss/tuoreimmat.xml": "paikalliset:tampere",
     "https://feeds.yle.fi/uutiset/rss/yle-pirkanmaa.rss": "paikalliset:tampere",
+    # Local: Jyväskylä
+    "https://ksml.fi/feed/rss": "paikalliset:jyvaskyla",
+    "https://feeds.yle.fi/uutiset/rss/yle-keski-suomi.rss": "paikalliset:jyvaskyla",
+    # Local: Kuopio
+    "https://savonsanomat.fi/feed/rss": "paikalliset:kuopio",
+    "https://feeds.yle.fi/uutiset/rss/yle-savo.rss": "paikalliset:kuopio",
+    # Local: Hämeenlinna
+    "https://hameensanomat.fi/feed/rss": "paikalliset:hameenlinna",
+    "https://feeds.yle.fi/uutiset/rss/yle-hame.rss": "paikalliset:hameenlinna",
+    # Local: Lappeenranta
+    "https://esaimaa.fi/feed/rss": "paikalliset:lappeenranta",
+    "https://feeds.yle.fi/uutiset/rss/yle-etela-karjala.rss": "paikalliset:lappeenranta",
     # Local: Oulu
     "https://www.kaleva.fi/rss/uutiset": "paikalliset:oulu",
     "https://feeds.yle.fi/uutiset/rss/yle-oulu.rss": "paikalliset:oulu",
@@ -47,6 +65,9 @@ FEED_REGIONS: dict[str, str] = {
     "https://feeds.yle.fi/uutiset/rss/yle-lounainen-suomi.rss": "paikalliset:turku",
     # Local: Helsinki
     "https://feeds.yle.fi/uutiset/rss/yle-uusimaa.rss": "paikalliset:helsinki",
+    "https://uusimaa.fi/feed/rss": "paikalliset:helsinki",
+    # Local: Turku extra
+    "https://sss.fi/feed": "paikalliset:turku",
     # International
     "https://feeds.bbci.co.uk/news/world/rss.xml": "maailma",
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml": "maailma",
@@ -64,6 +85,10 @@ LOCAL_CITIES: dict[str, str] = {
     "oulu": "Oulu",
     "turku": "Turku",
     "helsinki": "Helsinki",
+    "jyvaskyla": "Jyväskylä",
+    "kuopio": "Kuopio",
+    "hameenlinna": "Hämeenlinna",
+    "lappeenranta": "Lappeenranta",
 }
 
 MAJOR_SOURCES = {

@@ -35,6 +35,10 @@ export const LOCAL_CITIES = {
   oulu: 'Oulu',
   turku: 'Turku',
   helsinki: 'Helsinki',
+  jyvaskyla: 'Jyväskylä',
+  kuopio: 'Kuopio',
+  hameenlinna: 'Hämeenlinna',
+  lappeenranta: 'Lappeenranta',
 }
 
 export const ALL_SOURCES = [
