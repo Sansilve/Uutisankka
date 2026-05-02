@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native'
 import ArticleCard from './src/components/ArticleCard'
+import HistoryScreen from './src/components/HistoryScreen'
 import PreferencesPanel from './src/components/PreferencesPanel'
 import {
   fetchBriefing,
@@ -23,14 +24,19 @@ import {
 
 const DAILY_LIMIT = 8
 
-function Masthead({ metricsText, onOpenSettings }) {
+function Masthead({ metricsText, onOpenSettings, onOpenHistory }) {
   return (
     <View style={styles.masthead}>
       <View style={styles.mastheadTop}>
         <Text style={styles.mastheadName}>🦆 UutisAnkka</Text>
-        <TouchableOpacity style={styles.settingsButton} onPress={onOpenSettings}>
-          <Text style={styles.settingsButtonText}>Asetukset</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.settingsButton} onPress={onOpenHistory}>
+            <Text style={styles.settingsButtonText}>Historia</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingsButton} onPress={onOpenSettings}>
+            <Text style={styles.settingsButtonText}>Asetukset</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <View style={styles.mastheadRule} />
       <View style={styles.mastheadMeta}>
@@ -242,6 +248,15 @@ export default function App() {
     )
   }
 
+  if (screen === 'history') {
+    return (
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <HistoryScreen onClose={() => setScreen('feed')} />
+      </SafeAreaView>
+    )
+  }
+
   if (screen === 'settings') {
     return (
       <SafeAreaView style={styles.root}>
@@ -269,7 +284,7 @@ export default function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      <Masthead metricsText={metricsText} onOpenSettings={() => setScreen('settings')} />
+      <Masthead metricsText={metricsText} onOpenSettings={() => setScreen('settings')} onOpenHistory={() => setScreen('history')} />
 
       {statusMsg ? (
         <View style={styles.statusBanner}>

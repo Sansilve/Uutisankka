@@ -11,6 +11,7 @@ from .database import (
     apply_feedback,
     ensure_default_preferences,
     get_preferences,
+    get_swipe_history,
     init_db,
     random_briefing,
     reset_all_enrichment,
@@ -23,12 +24,14 @@ from .models import (
     BriefingResponse,
     FeedbackPayload,
     FeedbackResponse,
+    HistoryResponse,
     IngestResponse,
     MetricsResponse,
     PreferenceProfile,
     PreferenceUpdate,
     ScoreBreakdownPayload,
     SummaryPayload,
+    SwipeHistoryItem,
 )
 from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics, translate_existing_english
 
@@ -195,3 +198,25 @@ def submit_feedback(payload: FeedbackPayload) -> FeedbackResponse:
 def get_metrics(limit: int = Query(default=10, ge=1, le=20)) -> MetricsResponse:
     result = top_feedback_metrics(limit)
     return MetricsResponse(**result)
+
+
+@app.get("/api/history", response_model=HistoryResponse)
+def get_history(limit: int = Query(default=100, ge=1, le=500)) -> HistoryResponse:
+    rows = get_swipe_history(limit)
+    items = []
+    for row in rows:
+        items.append(
+            SwipeHistoryItem(
+                swipe_id=row["swipe_id"],
+                is_relevant=bool(row["is_relevant"]),
+                swiped_at=row["swiped_at"],
+                id=row["id"],
+                title=row["title"],
+                source=row["source"],
+                published_at=row["published_at"],
+                url=row["url"],
+                topics=json.loads(row["topics"] or "[]"),
+                summary=json.loads(row["summary_json"] or '{"bullets": []}'),
+            )
+        )
+    return HistoryResponse(total=len(items), items=items)
