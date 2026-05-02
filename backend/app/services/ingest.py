@@ -188,11 +188,13 @@ def enrich_unprocessed_articles() -> int:
         elif is_english_url(url):
             # One LLM call: translate title to Finnish + produce Finnish bullets
             finnish_title, summary = translate_and_summarize(row["title"], content)
-            set_llm_cache(content_hash, json.dumps(summary), finnish_title)
+            if summary.get("source") == "llm":
+                set_llm_cache(content_hash, json.dumps(summary), finnish_title)
         else:
             finnish_title = None
             summary = summarize_article(row["title"], content, row["source"])
-            set_llm_cache(content_hash, json.dumps(summary), None)
+            if summary.get("source") == "llm":
+                set_llm_cache(content_hash, json.dumps(summary), None)
 
         # Score using the (potentially translated) title for better Finnish keyword matching
         score_title = finnish_title or row["title"]
