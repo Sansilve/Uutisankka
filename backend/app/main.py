@@ -11,6 +11,7 @@ from .database import (
     apply_feedback,
     ensure_default_preferences,
     get_preferences,
+    list_articles,
     get_swipe_history,
     init_db,
     random_briefing,
@@ -21,6 +22,8 @@ from .database import (
 )
 from .config import LOCAL_CITIES
 from .models import (
+    AllNewsItem,
+    AllNewsResponse,
     ArticleBrief,
     BriefingResponse,
     FeedbackPayload,
@@ -272,3 +275,30 @@ def get_history(limit: int = Query(default=100, ge=1, le=500)) -> HistoryRespons
             )
         )
     return HistoryResponse(total=len(items), items=items)
+
+
+@app.get("/api/articles", response_model=AllNewsResponse)
+def get_all_articles(limit: int = Query(default=300, ge=1, le=1000)) -> AllNewsResponse:
+    """Development endpoint: browse all latest articles, not just swiped or briefing picks."""
+    prefs = get_preferences()
+    rows = list_articles(
+        limit=limit,
+        region_filters=_scope_to_regions(prefs),
+        hide_paywall=prefs.get("hide_paywall", True),
+        excluded_sources=prefs.get("excluded_sources") or None,
+    )
+    items: list[AllNewsItem] = []
+    for row in rows:
+        items.append(
+            AllNewsItem(
+                id=row["id"],
+                title=row["title"],
+                source=row["source"],
+                published_at=row["published_at"],
+                url=row["url"],
+                topics=json.loads(row["topics"] or "[]"),
+                summary=json.loads(row["summary_json"] or '{"bullets": []}'),
+                is_paywall=bool(row["is_paywall"]),
+            )
+        )
+    return AllNewsResponse(total=len(items), items=items)

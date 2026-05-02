@@ -699,6 +699,58 @@ def get_swipe_history(limit: int = 100) -> list[sqlite3.Row]:
         conn.close()
 
 
+def list_articles(
+    limit: int = 300,
+    region_filters: list[str] | None = None,
+    hide_paywall: bool = False,
+    excluded_sources: list[str] | None = None,
+) -> list[sqlite3.Row]:
+    """Return latest articles for development browsing (not only swiped items)."""
+    conn = _conn()
+    try:
+        params: list = []
+
+        where_region = ""
+        if region_filters:
+            placeholders = ",".join("?" * len(region_filters))
+            where_region = f"AND a.region IN ({placeholders})"
+            params.extend(region_filters)
+
+        where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+
+        where_sources = ""
+        if excluded_sources:
+            sp = ",".join("?" * len(excluded_sources))
+            where_sources = f"AND a.source NOT IN ({sp})"
+            params.extend(excluded_sources)
+
+        params.append(limit)
+
+        return conn.execute(
+            f"""
+            SELECT
+                a.id,
+                a.title,
+                a.source,
+                a.published_at,
+                a.url,
+                a.topics,
+                a.summary_json,
+                a.is_paywall
+            FROM articles a
+            WHERE 1=1
+              {where_region}
+              {where_paywall}
+              {where_sources}
+            ORDER BY datetime(a.published_at) DESC, a.id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 def top_feedback_metrics(limit: int = 10) -> dict[str, float | int | None]:
     conn = _conn()
     try:

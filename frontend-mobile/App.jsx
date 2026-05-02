@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native'
 import ArticleCard from './src/components/ArticleCard'
+import AllNewsScreen from './src/components/AllNewsScreen'
 import HistoryScreen from './src/components/HistoryScreen'
 import OnboardingScreen from './src/components/OnboardingScreen'
 import PreferencesPanel from './src/components/PreferencesPanel'
@@ -26,12 +27,15 @@ import {
 
 const DAILY_LIMIT = 8
 
-function Masthead({ metricsText, onOpenSettings, onOpenHistory }) {
+function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews }) {
   return (
     <View style={styles.masthead}>
       <View style={styles.mastheadTop}>
         <Text style={styles.mastheadName}>🦆 UutisAnkka</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.settingsButton} onPress={onOpenAllNews}>
+            <Text style={styles.settingsButtonText}>Kaikki</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.settingsButton} onPress={onOpenHistory}>
             <Text style={styles.settingsButtonText}>Historia</Text>
           </TouchableOpacity>
@@ -281,6 +285,15 @@ export default function App() {
     )
   }
 
+  if (screen === 'all-news') {
+    return (
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <AllNewsScreen onClose={() => setScreen('feed')} />
+      </SafeAreaView>
+    )
+  }
+
   if (screen === 'settings') {
     return (
       <SafeAreaView style={styles.root}>
@@ -308,7 +321,12 @@ export default function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      <Masthead metricsText={metricsText} onOpenSettings={() => setScreen('settings')} onOpenHistory={() => setScreen('history')} />
+      <Masthead
+        metricsText={metricsText}
+        onOpenSettings={() => setScreen('settings')}
+        onOpenHistory={() => setScreen('history')}
+        onOpenAllNews={() => setScreen('all-news')}
+      />
 
       {statusMsg ? (
         <View style={styles.statusBanner}>

@@ -100,3 +100,19 @@ class SwipeHistoryItem(BaseModel):
 class HistoryResponse(BaseModel):
     total: int
     items: List[SwipeHistoryItem]
+
+
+class AllNewsItem(BaseModel):
+    id: int
+    title: str
+    source: str
+    published_at: datetime | None
+    url: str
+    topics: List[str]
+    summary: SummaryPayload
+    is_paywall: bool = False
+
+
+class AllNewsResponse(BaseModel):
+    total: int
+    items: List[AllNewsItem]
