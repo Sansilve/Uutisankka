@@ -37,8 +37,8 @@ Esimerkiksi: "Leikkaukset vaikuttavat palvelujen saatavuuteen" tai \
 ÄLÄ toista "Mitä tapahtui" -kohtaa eri sanoin. Saa käyttää yleistietoa artikkelin lisäksi.
 
 - Osapuolet: VAIN jos henkilöt/organisaatiot ovat merkittäviä tai yllättäviä. \
-Esimerkiksi: "Pääministeri Orpo", "Euroopan komissio", "OpenAI". \
-JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija).
+Esimerkiksi: "Pääministeri Petteri Orpo", "Euroopan komissio", "OpenAI". \
+JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija), käytä perusmuotoja.
 
 - Tausta: Relevantti konteksti — vain jos selittää miksi tilanne on syntynyt.
 
@@ -153,6 +153,13 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     # not just "short", since a real article can have a short lead sentence.
     stripped = content.strip() if content else ""
     title_stripped = title.strip()
+
+    # If content is genuinely absent (RSS feed omits article body), do not treat
+    # as paywall — the article may be freely accessible on the website.
+    # Use a distinct source value so database.py does NOT set is_paywall=1.
+    if not stripped:
+        return {"bullets": [], "source": "empty_feed"}
+
     # Normalize both for comparison: lowercase, collapse whitespace
     def _norm(s: str) -> str:
         return re.sub(r"\s+", " ", s.lower().strip())
@@ -162,7 +169,7 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
 
     # Paywall keywords in Finnish/English that indicate subscriber-only content
     _PAYWALL_WORDS = [
-        "tilaajille", "tilaa", "vain tilaajille", "maksullinen",
+        "tilaajille", "vain tilaajille", "maksullinen",
         "subscribers only", "premium", "paywall",
     ]
     has_paywall_word = any(w in norm_content for w in _PAYWALL_WORDS)
@@ -191,10 +198,12 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     sentence_count = len([s for s in re.split(r'[.!?]+', stripped) if len(s.strip()) > 15])
 
     structural_paywall = (
-        len(stripped) < 30  # essentially empty
+        (0 < len(stripped) < 30)  # very short but non-empty — likely truncated paywall
         or norm_content == norm_title  # content is exactly the title
         or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
         or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
+        # Note: len == 0 (empty content) is NOT treated as paywall — RSS feeds may simply
+        # omit article text. Caller handles empty-content articles separately.
     )
 
     teaser_paywall = (
@@ -212,8 +221,9 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     elif is_likely_paywalled_source and not is_mixed_tabloid_source:
         is_paywall = teaser_paywall
     elif is_mixed_tabloid_source:
-        # IS/IL feeds often have very short but free leads.
-        is_paywall = len(stripped) < 120 and sentence_count <= 1
+        # IS/IL RSS feeds give short free leads — only rely on hard keyword evidence.
+        # Prefer false negatives over false positives (loose detection).
+        is_paywall = False
     else:
         # For free/unknown sources, do not mark paywall from short teaser alone.
         is_paywall = False

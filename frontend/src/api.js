@@ -58,3 +58,10 @@ export function triggerReenrich() {
 export function fetchReenrichStatus() {
   return request('/api/admin/reenrich/status')
 }
+
+export function fetchHistory(limit = 200) {
+  return request(`/api/history?limit=${limit}`)
+}
+export function fetchArticles(limit = 50, includePaywall = true) {
+  return request(`/api/articles?limit=${limit}&include_paywall=${includePaywall}`)
+}
