@@ -189,15 +189,18 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     # Many international wire/public-broadcaster feeds are free by design.
     # For those, avoid aggressive "short teaser" rules to reduce false positives.
     _FREE_SOURCE_HINTS = [
-        "guardian", "bbc", "reuters", "nyt", "new york times", "washington post",
+        "guardian", "bbc", "reuters",
         "al jazeera", "france 24", "sky news", "rfi", "upi", "npr", "cnn", "dw",
-        "euronews", "time", "latimes", "la times", "independent", "financial times",
-        "global news", "yle",
+        "euronews", "global news", "yle",
     ]
     _PAYWALLED_SOURCE_HINTS = [
         "helsingin sanomat", "aamulehti", "iltalehti", "ilta-sanomat",
         "satakunnan", "hameen sanomat", "ksml", "savonsanomat", "kaleva",
         "uusimaa", "esaimaa", "aamuposti", "maaseudun tulevaisuus",
+        # International paywall sources
+        "nyt", "new york times", "nytimes",
+        "washington post", "financial times",
+        "la times", "latimes", "los angeles times",
     ]
     _MIXED_TABLOID_HINTS = [
         "iltalehti", "ilta-sanomat",
