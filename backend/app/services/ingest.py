@@ -10,7 +10,7 @@ from urllib.request import urlopen
 
 import feedparser
 
-from ..config import DEFAULT_FEEDS
+from ..config import DEFAULT_FEEDS, FEED_REGIONS
 from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
@@ -115,6 +115,7 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
                 "content": content,
                 "url": link,
                 "content_hash": content_hash,
+                "region": FEED_REGIONS.get(url, "suomi"),
             }
 
             if insert_article(article):

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -112,6 +113,7 @@ export default function App() {
   const { width } = useWindowDimensions()
   const isCompact = width < 560
   const [screen, setScreen] = useState('feed')
+  const [onboardingDone, setOnboardingDone] = useState(null) // null = checking
   const [briefing, setBriefing] = useState([])
   const [preferences, setPreferences] = useState({ interests: [], disliked_topics: [] })
   const [metrics, setMetrics] = useState(null)
@@ -143,6 +145,12 @@ export default function App() {
       setStatusMsg(`Virhe: ${error.message}`)
     }
   }
+
+  useEffect(() => {
+    AsyncStorage.getItem('onboarding_done').then((val) => {
+      setOnboardingDone(val === 'true')
+    })
+  }, [])
 
   useEffect(() => {
     loadData().finally(() => setLoading(false))
@@ -232,12 +240,27 @@ export default function App() {
     return `${Math.round(metrics.positive_feedback_ratio * 100)}% relevanttia · ${metrics.total_feedback_votes} ääntä`
   }, [metrics])
 
-  if (loading) {
+  if (loading || onboardingDone === null) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         <ActivityIndicator size="large" color="#1a1a1a" />
         <Text style={styles.loadingText}>Rakennetaan päivän uutiskierros...</Text>
+      </SafeAreaView>
+    )
+  }
+
+  if (!onboardingDone) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <OnboardingScreen
+          onComplete={async () => {
+            await AsyncStorage.setItem('onboarding_done', 'true')
+            setOnboardingDone(true)
+            await loadData()
+          }}
+        />
       </SafeAreaView>
     )
   }

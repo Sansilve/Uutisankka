@@ -5,13 +5,17 @@ from pydantic import BaseModel, Field
 
 
 class PreferenceProfile(BaseModel):
-    interests: List[str] = Field(default_factory=lambda: ["technology", "politics", "economy"])
-    disliked_topics: List[str] = Field(default_factory=lambda: ["celebrity", "entertainment"])
+    interests: List[str] = Field(default_factory=lambda: ["politiikka", "teknologia", "talous"])
+    disliked_topics: List[str] = Field(default_factory=lambda: ["viihde", "celebrity"])
+    news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
+    local_city: str = ""
 
 
 class PreferenceUpdate(BaseModel):
     interests: List[str]
     disliked_topics: List[str]
+    news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
+    local_city: str = ""
 
 
 class SummaryPayload(BaseModel):

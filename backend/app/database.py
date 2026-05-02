@@ -55,6 +55,8 @@ def init_db() -> None:
                     user_id INTEGER PRIMARY KEY CHECK (user_id = 1),
                     interests TEXT NOT NULL,
                     disliked_topics TEXT NOT NULL,
+                    news_scope TEXT NOT NULL DEFAULT '["suomi","maailma"]',
+                    local_city TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL
                 );
 
@@ -70,6 +72,9 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "base_score", "REAL DEFAULT 0")
             _ensure_column(conn, "articles", "feedback_score", "REAL DEFAULT 0")
             _ensure_column(conn, "articles", "score_breakdown_json", "TEXT DEFAULT '{\"items\": []}'")
+            _ensure_column(conn, "articles", "region", "TEXT NOT NULL DEFAULT 'suomi'")
+            _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
+            _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             conn.commit()
         finally:
             conn.close()
@@ -82,7 +87,11 @@ def ensure_default_preferences() -> None:
 
 
 def upsert_preferences(
-    interests: list[str], disliked_topics: list[str], only_if_missing: bool = False
+    interests: list[str],
+    disliked_topics: list[str],
+    news_scope: list[str] | None = None,
+    local_city: str = "",
+    only_if_missing: bool = False,
 ) -> None:
     with _db_lock:
         conn = _conn()
@@ -93,58 +102,66 @@ def upsert_preferences(
             if existing and only_if_missing:
                 return
 
-            payload = (
-                json.dumps(interests),
-                json.dumps(disliked_topics),
-                datetime.utcnow().isoformat(),
-            )
+            scope = news_scope if news_scope is not None else ["suomi", "maailma"]
+            timestamp = datetime.utcnow().isoformat()
             if existing:
                 conn.execute(
                     """
                     UPDATE user_preferences
-                    SET interests = ?, disliked_topics = ?, updated_at = ?
+                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, updated_at = ?
                     WHERE user_id = 1
                     """,
-                    payload,
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, timestamp),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO user_preferences (user_id, interests, disliked_topics, updated_at)
-                    VALUES (1, ?, ?, ?)
+                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?)
                     """,
-                    payload,
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, timestamp),
                 )
             conn.commit()
         finally:
             conn.close()
 
 
-def get_preferences() -> dict[str, list[str]]:
+def get_preferences() -> dict:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT interests, disliked_topics FROM user_preferences WHERE user_id = 1"
+            "SELECT interests, disliked_topics, news_scope, local_city FROM user_preferences WHERE user_id = 1"
         ).fetchone()
         if not row:
             return {
-                "interests": ["technology", "politics", "economy"],
-                "disliked_topics": ["celebrity", "entertainment"],
+                "interests": ["politiikka", "teknologia", "talous"],
+                "disliked_topics": ["viihde", "celebrity"],
+                "news_scope": ["suomi", "maailma"],
+                "local_city": "",
             }
         return {
             "interests": json.loads(row["interests"]),
             "disliked_topics": json.loads(row["disliked_topics"]),
+            "news_scope": json.loads(row["news_scope"] or '["suomi","maailma"]'),
+            "local_city": row["local_city"] or "",
         }
     finally:
         conn.close()
 
 
-def random_briefing(limit: int = 10) -> list:
+def random_briefing(limit: int = 10, region_filters: list[str] | None = None) -> list:
     """Return *limit* random enriched articles (score > 0), shuffled each call."""
     conn = _conn()
     try:
+        if region_filters:
+            placeholders = ",".join("?" * len(region_filters))
+            where_region = f"AND a.region IN ({placeholders})"
+            params: tuple = tuple(region_filters) + (limit,)
+        else:
+            where_region = ""
+            params = (limit,)
         rows = conn.execute(
-            """
+            f"""
             SELECT
                 a.id, a.title, a.source, a.published_at, a.url,
                 a.score, a.base_score, a.feedback_score,
@@ -154,10 +171,11 @@ def random_briefing(limit: int = 10) -> list:
             FROM articles a
             LEFT JOIN article_feedback f ON f.article_id = a.id
             WHERE a.score > 0
+              {where_region}
             ORDER BY RANDOM()
             LIMIT ?
             """,
-            (limit,),
+            params,
         ).fetchall()
         return rows
     finally:
@@ -170,8 +188,8 @@ def insert_article(article: dict[str, Any]) -> bool:
         try:
             cursor = conn.execute(
                 """
-                INSERT OR IGNORE INTO articles (title, source, published_at, content, url, content_hash)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO articles (title, source, published_at, content, url, content_hash, region)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     article["title"],
@@ -180,6 +198,7 @@ def insert_article(article: dict[str, Any]) -> bool:
                     article["content"],
                     article["url"],
                     article["content_hash"],
+                    article.get("region", "suomi"),
                 ),
             )
             conn.commit()
@@ -534,11 +553,18 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
             conn.close()
 
 
-def top_briefing(limit: int = 10) -> list[sqlite3.Row]:
+def top_briefing(limit: int = 10, region_filters: list[str] | None = None) -> list[sqlite3.Row]:
     conn = _conn()
     try:
+        if region_filters:
+            placeholders = ",".join("?" * len(region_filters))
+            where_region = f"AND a.region IN ({placeholders})"
+            params: tuple = tuple(region_filters) + (limit,)
+        else:
+            where_region = ""
+            params = (limit,)
         return conn.execute(
-            """
+            f"""
             SELECT
                 a.id,
                 a.title,
@@ -558,10 +584,11 @@ def top_briefing(limit: int = 10) -> list[sqlite3.Row]:
             WHERE a.score > 0
               AND (a.published_at IS NULL
                    OR datetime(a.published_at) >= datetime('now', '-48 hours'))
+              {where_region}
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,
-            (limit,),
+            params,
         ).fetchall()
     finally:
         conn.close()

@@ -11,6 +11,7 @@ from .database import (
     apply_feedback,
     ensure_default_preferences,
     get_preferences,
+    get_swipe_history,
     init_db,
     random_briefing,
     reset_all_enrichment,
@@ -18,17 +19,20 @@ from .database import (
     top_feedback_metrics,
     upsert_preferences,
 )
+from .config import LOCAL_CITIES
 from .models import (
     ArticleBrief,
     BriefingResponse,
     FeedbackPayload,
     FeedbackResponse,
+    HistoryResponse,
     IngestResponse,
     MetricsResponse,
     PreferenceProfile,
     PreferenceUpdate,
     ScoreBreakdownPayload,
     SummaryPayload,
+    SwipeHistoryItem,
 )
 from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics, translate_existing_english
 
@@ -102,9 +106,13 @@ def read_preferences() -> PreferenceProfile:
 @app.put("/api/preferences", response_model=PreferenceProfile)
 def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTasks) -> PreferenceProfile:
     old_prefs = get_preferences()
-    upsert_preferences(payload.interests, payload.disliked_topics)
+    upsert_preferences(
+        payload.interests,
+        payload.disliked_topics,
+        news_scope=payload.news_scope,
+        local_city=payload.local_city,
+    )
     new_prefs = get_preferences()
-    # Compute which topics actually changed so we can do a targeted rescore.
     changed_topics = _diff_topics(old_prefs, new_prefs)
     background_tasks.add_task(_reenrich_changed, changed_topics, new_prefs)
     return PreferenceProfile(**new_prefs)
@@ -161,14 +169,31 @@ def _rows_to_briefing(rows) -> BriefingResponse:
     return BriefingResponse(generated_at=datetime.utcnow(), total=len(stories), stories=stories)
 
 
+def _scope_to_regions(prefs: dict) -> list[str] | None:
+    """Convert news_scope + local_city preference to region filter list for DB queries."""
+    scope: list[str] = prefs.get("news_scope") or ["suomi", "maailma"]
+    city: str = prefs.get("local_city") or ""
+    regions: list[str] = []
+    for s in scope:
+        if s == "suomi":
+            regions.append("suomi")
+        elif s == "maailma":
+            regions.append("maailma")
+        elif s == "paikalliset" and city in LOCAL_CITIES:
+            regions.append(f"paikalliset:{city}")
+    return regions if regions else None
+
+
 @app.get("/api/briefing", response_model=BriefingResponse)
 def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
-    return _rows_to_briefing(top_briefing(limit))
+    prefs = get_preferences()
+    return _rows_to_briefing(top_briefing(limit, region_filters=_scope_to_regions(prefs)))
 
 
 @app.get("/api/briefing/random", response_model=BriefingResponse)
 def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
-    return _rows_to_briefing(random_briefing(limit))
+    prefs = get_preferences()
+    return _rows_to_briefing(random_briefing(limit, region_filters=_scope_to_regions(prefs)))
 
 
 @app.post("/api/admin/reenrich")
