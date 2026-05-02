@@ -482,3 +482,112 @@ button:disabled { cursor: not-allowed; opacity: 0.5; transform: none; box-shadow
   padding: 2.5rem 0;
   font-size: 0.95rem;
 }
+
+/* ── Data stats ──────────────────────────────────────────────────────────── */
+.data-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+@media (max-width: 480px) { .data-stats { grid-template-columns: repeat(2, 1fr); } }
+
+.stat-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.5rem;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(29,42,53,0.05);
+}
+.stat-num { font-size: 1.6rem; font-weight: 800; color: var(--accent); font-family: 'Newsreader', serif; }
+.stat-label { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-top: 0.1rem; }
+
+/* ── Topic & region filter bars ──────────────────────────────────────────── */
+.topic-bar, .region-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+.chip-count {
+  display: inline-block;
+  background: rgba(255,255,255,0.25);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+  font-size: 0.7rem;
+  margin-left: 0.2rem;
+}
+.chip--on .chip-count { background: rgba(255,255,255,0.3); }
+
+/* ── Briefing toolbar ────────────────────────────────────────────────────── */
+.briefing-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.mode-chips { display: flex; gap: 0.35rem; }
+.unsaved-inline { font-size: 0.8rem; color: var(--muted); }
+
+/* ── Prefs panel sections ────────────────────────────────────────────────── */
+.pref-section {
+  margin-bottom: 1.2rem;
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.pref-section:last-of-type { border-bottom: none; }
+.pref-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 0.45rem;
+}
+
+/* Scope chip variant */
+.chip--scope.chip--on { background: #0c4a6e; border-color: #0c4a6e; }
+
+/* Blocked chip */
+.chip--blocked { opacity: 0.35; cursor: not-allowed !important; }
+
+/* Excluded source */
+.chip--source { font-size: 0.75rem; }
+.chip--excluded { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+
+/* ── Toggle switch ───────────────────────────────────────────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  cursor: pointer;
+  gap: 1rem;
+}
+.toggle-info { flex: 1; }
+.toggle-label { display: block; font-weight: 700; font-size: 0.9rem; margin-bottom: 0.15rem; }
+.toggle-desc { display: block; font-size: 0.78rem; color: var(--muted); }
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--line);
+  border: none;
+  padding: 0;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 200ms;
+}
+.toggle-switch--on { background: var(--accent); }
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: left 200ms;
+}
+.toggle-thumb--on { left: 23px; }
