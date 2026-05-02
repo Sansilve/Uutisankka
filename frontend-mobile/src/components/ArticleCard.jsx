@@ -11,47 +11,74 @@ import {
   View,
 } from 'react-native'
 
-const TOPIC_STYLES = {
-  technology: { bg: '#d9ecff', text: '#165ec9' },
-  teknologia: { bg: '#d9ecff', text: '#165ec9' },
-  science: { bg: '#efe0ff', text: '#8a2be2' },
-  tiede: { bg: '#efe0ff', text: '#8a2be2' },
-  politics: { bg: '#ffe0df', text: '#d63031' },
-  politiikka: { bg: '#ffe0df', text: '#d63031' },
-  economy: { bg: '#fff2d6', text: '#b7791f' },
-  talous: { bg: '#fff2d6', text: '#b7791f' },
-  health: { bg: '#ddfff0', text: '#0e9f6e' },
-  terveys: { bg: '#ddfff0', text: '#0e9f6e' },
-  culture: { bg: '#ffe1f0', text: '#d63384' },
-  kulttuuri: { bg: '#ffe1f0', text: '#d63384' },
-  sports: { bg: '#e6f7db', text: '#2f855a' },
-  urheilu: { bg: '#e6f7db', text: '#2f855a' },
-  environment: { bg: '#e3f7e7', text: '#2b8a3e' },
-  ympäristö: { bg: '#e3f7e7', text: '#2b8a3e' },
+// Dark, muted newspaper-style topic colors
+const TOPIC_COLORS = {
+  technology:    '#1e3a8a',
+  teknologia:    '#1e3a8a',
+  science:       '#3b0764',
+  tiede:         '#3b0764',
+  politics:      '#991b1b',
+  politiikka:    '#991b1b',
+  economy:       '#065f46',
+  talous:        '#065f46',
+  health:        '#064e3b',
+  terveys:       '#064e3b',
+  culture:       '#831843',
+  kulttuuri:     '#831843',
+  sports:        '#14532d',
+  urheilu:       '#14532d',
+  environment:   '#052e16',
+  celebrity:     '#581c87',
+  weather:       '#0c4a6e',
+  crime:         '#450a0a',
+  transportation:'#1e3a5f',
+  military:      '#1c1917',
+  education:     '#1e1b4b',
 }
 
-function topicStyle(topic) {
-  return TOPIC_STYLES[topic] || { bg: '#ececf3', text: '#495057' }
+const TOPIC_LABELS = {
+  politics:      'Politiikka',
+  politiikka:    'Politiikka',
+  economy:       'Talous',
+  talous:        'Talous',
+  technology:    'Teknologia',
+  teknologia:    'Teknologia',
+  science:       'Tiede',
+  tiede:         'Tiede',
+  sports:        'Urheilu',
+  urheilu:       'Urheilu',
+  health:        'Terveys',
+  terveys:       'Terveys',
+  environment:   'Ympäristö',
+  culture:       'Kulttuuri',
+  kulttuuri:     'Kulttuuri',
+  celebrity:     'Viihde',
+  weather:       'Sää',
+  crime:         'Rikos',
+  transportation:'Liikenne',
+  military:      'Puolustus',
+  education:     'Koulutus',
+}
+
+function topicColor(topic) {
+  return TOPIC_COLORS[topic] || '#374151'
 }
 
 function topicLabel(topic) {
-  const labels = {
-    politics: 'Politics',
-    economy: 'Economy',
-    technology: 'Technology',
-    science: 'Science',
-    sports: 'Sports',
-    health: 'Health',
-    environment: 'Environment',
-    culture: 'Culture',
-    celebrity: 'Celebrity',
-    weather: 'Weather',
-    crime: 'Crime',
-    transportation: 'Transport',
-    military: 'Military',
-    education: 'Education',
-  }
-  return labels[topic] || topic.charAt(0).toUpperCase() + topic.slice(1)
+  return TOPIC_LABELS[topic] || topic.charAt(0).toUpperCase() + topic.slice(1)
+}
+
+function todayFi() {
+  return new Date().toLocaleDateString('fi-FI', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function bulletsToLead(bullets) {
+  if (!bullets || bullets.length === 0) return ''
+  return bullets.slice(0, 3).join(' ')
 }
 
 export default function ArticleCard({
@@ -62,17 +89,16 @@ export default function ArticleCard({
   progressWidth,
   onSurprise,
 }) {
-  const { width, height } = useWindowDimensions()
+  const { width } = useWindowDimensions()
   const isCompact = width < 520
-  const isShort = height < 780
-  const cardWidth = Math.min(width - (isCompact ? 24 : 40), 760)
+  const cardWidth = Math.min(width - (isCompact ? 16 : 32), 760)
   const swipeThreshold = width * 0.24
   const [expanded, setExpanded] = useState(false)
   const pan = useRef(new Animated.ValueXY()).current
 
   const rotate = pan.x.interpolate({
     inputRange: [-width, 0, width],
-    outputRange: ['-14deg', '0deg', '14deg'],
+    outputRange: ['-10deg', '0deg', '10deg'],
   })
 
   const relevantOpacity = pan.x.interpolate({
@@ -96,7 +122,7 @@ export default function ArticleCard({
     const toX = isRelevant ? width * 1.2 : -width * 1.2
     Animated.timing(pan, {
       toValue: { x: toX, y: 0 },
-      duration: 190,
+      duration: 200,
       useNativeDriver: false,
     }).start(() => {
       pan.setValue({ x: 0, y: 0 })
@@ -106,40 +132,46 @@ export default function ArticleCard({
   }
 
   const responder = useMemo(
-    () => PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) =>
-        !disabled && (Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8),
-      onPanResponderMove: (_, gesture) => {
-        pan.setValue({ x: gesture.dx, y: gesture.dy * 0.12 })
-      },
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx > swipeThreshold) {
-          settleCard(true)
-          return
-        }
-        if (gesture.dx < -swipeThreshold) {
-          settleCard(false)
-          return
-        }
-        Animated.spring(pan, {
-          toValue: { x: 0, y: 0 },
-          friction: 5,
-          useNativeDriver: false,
-        }).start()
-      },
-    }),
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          !disabled && (Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8),
+        onPanResponderMove: (_, gesture) => {
+          pan.setValue({ x: gesture.dx, y: gesture.dy * 0.1 })
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dx > swipeThreshold) {
+            settleCard(true)
+            return
+          }
+          if (gesture.dx < -swipeThreshold) {
+            settleCard(false)
+            return
+          }
+          Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            friction: 5,
+            useNativeDriver: false,
+          }).start()
+        },
+      }),
     [disabled, pan, swipeThreshold],
   )
 
+  const lead = bulletsToLead(story.summary.bullets)
+  const scorePercent = `${Math.min(Math.max((totalScore / 20) * 100, 0), 100)}%`
+
   return (
-    <View style={[styles.screen, { paddingHorizontal: isCompact ? 10 : 18, paddingBottom: isCompact ? 10 : 22 }] }>
+    <View style={[styles.screen, { paddingHorizontal: isCompact ? 8 : 16 }]}>
       <View style={styles.topRow}>
         <View>
-          <Text style={styles.eyebrow}>Tanaan sinulle</Text>
-          <Text style={[styles.progressLabel, isCompact && styles.progressLabelCompact]}>{progressText}</Text>
+          <Text style={styles.eyebrow}>PÄIVÄN BRIEFING</Text>
+          <Text style={[styles.progressLabel, isCompact && styles.progressLabelCompact]}>
+            {progressText}
+          </Text>
         </View>
         <TouchableOpacity style={styles.surpriseButton} onPress={onSurprise} disabled={disabled}>
-          <Text style={styles.surpriseText}>Yllata minut</Text>
+          <Text style={styles.surpriseText}>✨ Yllätä minut</Text>
         </TouchableOpacity>
       </View>
 
@@ -151,11 +183,7 @@ export default function ArticleCard({
         <Animated.View
           style={[
             styles.card,
-            {
-              width: cardWidth,
-              padding: isCompact ? 14 : 20,
-            },
-            isShort && styles.cardShort,
+            { width: cardWidth },
             {
               transform: [
                 { translateX: pan.x },
@@ -166,37 +194,39 @@ export default function ArticleCard({
           ]}
           {...responder.panHandlers}
         >
-          <Animated.View style={[styles.overlay, styles.overlayRelevant, { opacity: relevantOpacity }]}>
-            <Text style={styles.overlayText}>RELEVANTTI</Text>
+          <Animated.View
+            style={[styles.overlay, styles.overlayRelevant, { opacity: relevantOpacity }]}
+          >
+            <Text style={styles.overlayTextRelevant}>KIINNOSTAA</Text>
           </Animated.View>
-          <Animated.View style={[styles.overlay, styles.overlayDismiss, { opacity: dismissOpacity }]}>
-            <Text style={styles.overlayText}>EI KIINNOSTA</Text>
+          <Animated.View
+            style={[styles.overlay, styles.overlayDismiss, { opacity: dismissOpacity }]}
+          >
+            <Text style={styles.overlayTextDismiss}>OHITAN</Text>
           </Animated.View>
 
-          <View style={styles.topicRow}>
-            {story.topics.slice(0, 3).map((topic) => {
-              const color = topicStyle(topic)
-              return (
-                <View key={topic} style={[styles.topicBadge, { backgroundColor: color.bg }]}>
-                  <Text style={[styles.topicText, { color: color.text }]}>{topicLabel(topic)}</Text>
+          <View style={styles.metaRow}>
+            <View style={styles.topicRow}>
+              {story.topics.slice(0, 3).map((topic) => (
+                <View key={topic} style={[styles.topicBadge, { borderColor: topicColor(topic) }]}>
+                  <Text style={[styles.topicText, { color: topicColor(topic) }]}>
+                    {topicLabel(topic)}
+                  </Text>
                 </View>
-              )
-            })}
+              ))}
+            </View>
+            <Text style={styles.dateText}>{todayFi()}</Text>
           </View>
 
-          <Text style={[styles.title, isCompact && styles.titleCompact, isShort && styles.titleShort]}>{story.title}</Text>
+          <Text style={[styles.title, isCompact && styles.titleCompact]}>{story.title}</Text>
 
-          <View style={[styles.summaryWrap, isShort && styles.summaryWrapShort]}>
-            {story.summary.bullets.slice(0, isCompact ? 3 : 5).map((bullet, index) => (
-              <Text key={`${story.id}-${index}`} style={[styles.bullet, isCompact && styles.bulletCompact, isShort && styles.bulletShort]}>
-                {'\u2022'} {bullet}
-              </Text>
-            ))}
-          </View>
+          <View style={styles.titleRule} />
 
-          <Pressable style={styles.whyToggle} onPress={() => setExpanded((value) => !value)}>
-            <Text style={styles.whyLabel}>Miksi tama sinulle?</Text>
-            <Text style={styles.whyCaret}>{expanded ? '^' : 'v'}</Text>
+          <Text style={[styles.lead, isCompact && styles.leadCompact]}>{lead}</Text>
+
+          <Pressable style={styles.whyToggle} onPress={() => setExpanded((v) => !v)}>
+            <Text style={styles.whyLabel}>💡 Miksi suosittelemme?</Text>
+            <Text style={styles.whyCaret}>{expanded ? '▲' : '▼'}</Text>
           </Pressable>
 
           {expanded ? (
@@ -204,48 +234,57 @@ export default function ArticleCard({
               {story.score_breakdown.items.length ? (
                 story.score_breakdown.items.map((item, index) => (
                   <View key={`${item.reason}-${index}`} style={styles.breakdownRow}>
+                    <Text style={styles.breakdownCheck}>✓</Text>
                     <Text style={styles.breakdownReason}>{item.reason}</Text>
-                    <Text style={styles.breakdownPoints}>
+                    <Text
+                      style={[
+                        styles.breakdownPoints,
+                        item.points >= 0 ? styles.pointsPos : styles.pointsNeg,
+                      ]}
+                    >
                       {item.points > 0 ? '+' : ''}
                       {item.points.toFixed(1)}
                     </Text>
                   </View>
                 ))
               ) : (
-                <Text style={styles.emptyBreakdown}>Ei piste-erittelya saatavilla.</Text>
+                <Text style={styles.emptyBreakdown}>Ei piste-erittelyä saatavilla.</Text>
               )}
-              <View style={styles.divider} />
-              <View style={styles.breakdownRow}>
-                <Text style={styles.totalLabel}>Pisteet</Text>
+              <View style={styles.breakdownDivider} />
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>YHTEENSÄ</Text>
                 <Text style={styles.totalValue}>{totalScore.toFixed(1)}</Text>
+              </View>
+              <View style={styles.scoreTrack}>
+                <View style={[styles.scoreFill, { width: scorePercent }]} />
               </View>
             </View>
           ) : null}
 
-          <View style={[styles.footer, isCompact && styles.footerCompact]}>
+          <View style={styles.footer}>
             <TouchableOpacity
               style={[styles.actionButton, styles.dismissButton]}
               onPress={() => settleCard(false)}
               disabled={disabled}
             >
-              <Text style={styles.dismissText}>Ei kiinnosta</Text>
+              <Text style={styles.dismissText}>👎  Ohita</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.relevantButton]}
               onPress={() => settleCard(true)}
               disabled={disabled}
             >
-              <Text style={styles.relevantText}>Relevantti</Text>
+              <Text style={styles.relevantText}>Kiinnostaa  👍</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(story.url)}>
-            <Text style={styles.linkText}>Lue lahde</Text>
+            <Text style={styles.linkText}>Lue alkuperäinen →</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
 
-      <Text style={styles.hint}>Swipe oikealle = relevantti · Swipe vasemmalle = ei kiinnosta</Text>
+      <Text style={styles.hint}>← Ohita · swipe · Kiinnostaa →</Text>
     </View>
   )
 }
@@ -254,9 +293,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     width: '100%',
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 22,
+    backgroundColor: '#ffffff',
+    paddingTop: 10,
+    paddingBottom: 10,
     overflow: 'hidden',
   },
   topRow: {
@@ -264,44 +303,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+    paddingHorizontal: 2,
   },
   eyebrow: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#9ca3af',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2,
   },
   progressLabel: {
-    color: '#111827',
-    fontSize: 24,
+    color: '#1a1a1a',
+    fontSize: 19,
     fontWeight: '800',
-    marginTop: 2,
+    fontFamily: 'Georgia',
+    marginTop: 1,
   },
   progressLabelCompact: {
-    fontSize: 17,
+    fontSize: 15,
   },
   surpriseButton: {
-    borderWidth: 1,
-    borderColor: '#d7d9e1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#FFB700',
+    borderRadius: 2,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    backgroundColor: '#fff',
   },
   surpriseText: {
-    color: '#1f2937',
-    fontSize: 14,
+    color: '#1a1a1a',
+    fontSize: 12,
     fontWeight: '700',
   },
   progressTrack: {
-    height: 6,
-    backgroundColor: '#d1d5db',
-    borderRadius: 999,
-    overflow: 'hidden',
+    height: 3,
+    backgroundColor: '#f3f4f6',
+    marginBottom: 10,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#111827',
-    borderRadius: 999,
+    backgroundColor: '#FFB700',
   },
   cardStage: {
     flex: 1,
@@ -310,97 +350,110 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    borderRadius: 3,
     padding: 20,
-    width: '100%',
     maxWidth: 760,
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6,
-  },
-  cardShort: {
-    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   overlay: {
     position: 'absolute',
-    top: 18,
-    zIndex: 2,
-    borderWidth: 2,
-    borderRadius: 10,
+    top: 22,
+    zIndex: 10,
+    borderWidth: 3,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderRadius: 2,
+    transform: [{ rotate: '-12deg' }],
   },
   overlayRelevant: {
-    right: 18,
-    borderColor: '#08a045',
-    backgroundColor: 'rgba(8,160,69,0.08)',
+    right: 14,
+    borderColor: '#065f46',
+    backgroundColor: 'rgba(6,95,70,0.05)',
   },
   overlayDismiss: {
-    left: 18,
-    borderColor: '#e11d48',
-    backgroundColor: 'rgba(225,29,72,0.08)',
+    left: 14,
+    borderColor: '#991b1b',
+    backgroundColor: 'rgba(153,27,27,0.05)',
   },
-  overlayText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1,
-    color: '#111827',
+  overlayTextRelevant: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: '#065f46',
+    fontFamily: 'Georgia',
+  },
+  overlayTextDismiss: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: '#991b1b',
+    fontFamily: 'Georgia',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   topicRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 10,
+    flex: 1,
+    gap: 6,
   },
   topicBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginRight: 8,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   topicText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  dateText: {
+    color: '#9ca3af',
+    fontSize: 11,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   title: {
-    color: '#111827',
-    fontSize: 31,
-    lineHeight: 38,
+    color: '#1a1a1a',
+    fontSize: 29,
+    lineHeight: 36,
     fontWeight: '800',
-    marginBottom: 18,
+    fontFamily: 'Georgia',
+    marginBottom: 14,
   },
   titleCompact: {
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 21,
+    lineHeight: 27,
     marginBottom: 10,
   },
-  titleShort: {
-    fontSize: 19,
-    lineHeight: 24,
-    marginBottom: 8,
+  titleRule: {
+    height: 2,
+    backgroundColor: '#1a1a1a',
+    marginBottom: 14,
   },
-  summaryWrap: {
-    gap: 12,
-    marginBottom: 18,
-  },
-  summaryWrapShort: {
-    gap: 6,
-    marginBottom: 10,
-  },
-  bullet: {
-    color: '#4b5563',
-    fontSize: 17,
+  lead: {
+    color: '#1a1a1a',
+    fontSize: 16,
     lineHeight: 26,
+    fontFamily: 'Georgia',
+    marginBottom: 16,
   },
-  bulletCompact: {
+  leadCompact: {
     fontSize: 14,
-    lineHeight: 20,
-  },
-  bulletShort: {
-    fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 22,
+    marginBottom: 12,
   },
   whyToggle: {
     flexDirection: 'row',
@@ -408,109 +461,139 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
-    paddingTop: 16,
-    marginTop: 4,
+    paddingTop: 12,
+    marginTop: 2,
   },
   whyLabel: {
-    color: '#374151',
-    fontSize: 15,
+    color: '#1a1a1a',
+    fontSize: 13,
     fontWeight: '700',
   },
   whyCaret: {
-    color: '#6b7280',
-    fontSize: 16,
+    color: '#FFB700',
+    fontSize: 12,
     fontWeight: '700',
   },
   breakdownPanel: {
-    marginTop: 14,
-    paddingTop: 6,
-    paddingBottom: 6,
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
   },
   breakdownRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 9,
-    gap: 12,
+    gap: 8,
+  },
+  breakdownCheck: {
+    color: '#065f46',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
+    width: 16,
   },
   breakdownReason: {
     flex: 1,
-    color: '#374151',
-    fontSize: 15,
-    lineHeight: 21,
+    color: '#4a4a4a',
+    fontSize: 13,
+    lineHeight: 19,
   },
   breakdownPoints: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
   },
+  pointsPos: { color: '#065f46' },
+  pointsNeg: { color: '#991b1b' },
   emptyBreakdown: {
-    color: '#6b7280',
-    fontSize: 14,
+    color: '#9ca3af',
+    fontSize: 13,
   },
-  divider: {
+  breakdownDivider: {
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
-    marginTop: 6,
-    paddingTop: 10,
+    marginVertical: 10,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 8,
   },
   totalLabel: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '800',
+    color: '#4a4a4a',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
   totalValue: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: '800',
+    color: '#1a1a1a',
+    fontSize: 24,
+    fontWeight: '900',
+    fontFamily: 'Georgia',
+  },
+  scoreTrack: {
+    height: 4,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  scoreFill: {
+    height: '100%',
+    backgroundColor: '#FFB700',
+    borderRadius: 2,
   },
   footer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     marginTop: 14,
-  },
-  footerCompact: {
-    flexDirection: 'column-reverse',
   },
   actionButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    minHeight: 52,
-    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderRadius: 2,
+    minHeight: 46,
+    paddingHorizontal: 10,
   },
   dismissButton: {
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-    backgroundColor: '#fffafb',
+    borderColor: '#991b1b',
+    backgroundColor: '#fff',
   },
   relevantButton: {
-    backgroundColor: '#08a045',
+    borderColor: '#065f46',
+    backgroundColor: '#fff',
   },
   dismissText: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '700',
+    color: '#991b1b',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   relevantText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
+    color: '#065f46',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   linkButton: {
     alignSelf: 'center',
-    marginTop: 14,
+    marginTop: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFB700',
+    paddingBottom: 1,
   },
   linkText: {
-    color: '#6b7280',
-    fontSize: 13,
-    fontWeight: '700',
+    color: '#4a4a4a',
+    fontSize: 11,
+    fontWeight: '600',
   },
   hint: {
     textAlign: 'center',
-    color: '#6b7280',
-    fontSize: 13,
-    marginTop: 18,
+    color: '#d1d5db',
+    fontSize: 11,
+    marginTop: 8,
+    letterSpacing: 0.5,
   },
 })
