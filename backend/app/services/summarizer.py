@@ -39,21 +39,26 @@ Tehtäväsi: tiivistä uutinen alla olevaan muotoon suomeksi.
 
 RAKENNE (käytä aina tässä järjestyksessä, mutta vain jos sisältö on erilainen):
 
-- Mitä tapahtui: Vastaa kysymykseen "mitä?" — yksi konkreettinen faktalause. \
-Ei saa olla otsikon toisto, vaan joko tarkempi kuvaus tai oleellinen yksityiskohta.
+- Mitä tapahtui: Vastaa kysymykseen "mitä?" — konkreettinen fakta tai tapahtuma. \
+Esimerkiksi: "Tampereen kaupunginvaltuusto hyväksyi budjettileikkaukset" tai \
+"Uusi tutkimus osoittaa että vitamiini D vähentää COVID-riskiä". \
+Ei saa olla otsikon toisto, vaan TARKEMPI tai ERILAINEN kuvaus.
 
-- Miksi tärkeää: Vastaa kysymykseen "miksi tämä on merkityksellistä?" — \
-anna näkökulma tai selitä seuraukset. Saat käyttää yleistietoa artikkelin lisäksi. \
-Esim: miten tämä vaikuttaa ihmisiin, yhteiskuntaan, talouteen tai tilanteen kehitykseen. \
-ÄLÄ toista "Mitä tapahtui" -kohtaa eri sanoin.
+- Miksi tärkeää: Vastaa kysymykseen "miksi tämä merkitsee?" — anna näkökulma tai seuraukset. \
+Esimerkiksi: "Leikkaukset vaikuttavat palvelujen saatavuuteen" tai \
+"Tutkimus voi muuttaa hoito-ohjeita miljoonille ihmisille". \
+ÄLÄ toista "Mitä tapahtui" -kohtaa eri sanoin. Saa käyttää yleistietoa artikkelin lisäksi.
 
-- Osapuolet: Henkilöt, organisaatiot tai maat — vain jos lisää ymmärrystä.
+- Osapuolet: VAIN jos henkilöt/organisaatiot ovat merkittäviä tai yllättäviä. \
+Esimerkiksi: "Pääministeri Orpo", "Euroopan komissio", "OpenAI". \
+JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija).
 
 - Tausta: Relevantti konteksti — vain jos selittää miksi tilanne on syntynyt.
 
 TÄRKEÄÄ:
-- Jos artikkelissa on vain yksi fakta eikä näkökulmaa, kirjoita vain "Mitä tapahtui"
+- Jos artikkelin sisältö on niukka, kirjoita vain "Mitä tapahtui"
 - Älä koskaan kirjoita kahta bulletia jotka sanovat saman asian eri sanoin
+- Älä listaa osapuolia jos ne eivät tuo ymmärrystä — jätä kohta pois mieluummin
 - Kirjoita vain bullet-pisteet, ei johdantoa eikä loppusanoja
 \
 """
