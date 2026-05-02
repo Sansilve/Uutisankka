@@ -14,6 +14,32 @@ DB_PATH = BASE_DIR / "news.db"
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
+
+def _parse_csv_env(name: str) -> list[str]:
+    raw = os.getenv(name, "")
+    if not raw.strip():
+        return []
+    return [value.strip() for value in raw.split(",") if value.strip()]
+
+
+DEFAULT_CORS_ALLOW_ORIGINS: list[str] = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "http://localhost:8082",
+    "http://127.0.0.1:8082",
+]
+
+# Example: CORS_ALLOW_ORIGINS=http://localhost:5173,http://192.168.10.50:8081
+CORS_ALLOW_ORIGINS: list[str] = _parse_csv_env("CORS_ALLOW_ORIGINS") or DEFAULT_CORS_ALLOW_ORIGINS
+
+# Allows local network clients by default (192.168.x.x). Can be overridden from env.
+CORS_ALLOW_ORIGIN_REGEX: str = os.getenv(
+    "CORS_ALLOW_ORIGIN_REGEX",
+    r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+)(:\d+)?$",
+)
+
 # Maps feed URL → region tag: "suomi" | "maailma" | "paikalliset:<city>"
 FEED_REGIONS: dict[str, str] = {
     # Finland national

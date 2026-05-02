@@ -20,7 +20,7 @@ from .database import (
     top_feedback_metrics,
     upsert_preferences,
 )
-from .config import LOCAL_CITIES
+from .config import CORS_ALLOW_ORIGIN_REGEX, CORS_ALLOW_ORIGINS, LOCAL_CITIES
 from .models import (
     AllNewsItem,
     AllNewsResponse,
@@ -72,16 +72,8 @@ app = FastAPI(title="No-BS Finnish News Briefing", version="0.1.0", lifespan=lif
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8081",
-        "http://127.0.0.1:8081",
-        "http://192.168.10.50:8081",
-        "http://localhost:8082",
-        "http://127.0.0.1:8082",
-        "http://192.168.10.50:8082",
-    ],
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
