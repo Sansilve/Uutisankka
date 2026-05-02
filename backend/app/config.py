@@ -14,7 +14,7 @@ DB_PATH = BASE_DIR / "news.db"
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
-# LLM settings — fallback (any OpenAI-compatible endpoint, e.g. Groq)
+# LLM settings — fallback 1 (any OpenAI-compatible endpoint, e.g. Groq)
 # Set FALLBACK_LLM_API_KEY + FALLBACK_LLM_BASE_URL in .env to enable.
 # Example (Groq):
 #   FALLBACK_LLM_API_KEY=gsk_...
@@ -23,6 +23,11 @@ LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
 FALLBACK_LLM_API_KEY: str = os.getenv("FALLBACK_LLM_API_KEY", "")
 FALLBACK_LLM_BASE_URL: str = os.getenv("FALLBACK_LLM_BASE_URL", "")
 FALLBACK_LLM_MODEL: str = os.getenv("FALLBACK_LLM_MODEL", "llama-3.1-8b-instant")
+
+# LLM settings — fallback 2 (Google Gemini)
+# Set GEMINI_API_KEY in .env to enable.
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
 # Maps feed URL → region tag: "suomi" | "maailma" | "paikalliset:<city>"
 FEED_REGIONS: dict[str, str] = {
