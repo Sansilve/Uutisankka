@@ -29,6 +29,7 @@ export default function OnboardingScreen({ onComplete }) {
   const [scope, setScope]         = useState(new Set(['suomi', 'maailma']))
   const [city, setCity]           = useState('')
   const [saving, setSaving]       = useState(false)
+  const [saveError, setSaveError] = useState(null)
 
   function toggleInterest(id) {
     const next = new Set(interests)
@@ -67,6 +68,7 @@ export default function OnboardingScreen({ onComplete }) {
 
   async function finish() {
     setSaving(true)
+    setSaveError(null)
     try {
       await updatePreferences({
         interests: [...interests],
@@ -76,6 +78,7 @@ export default function OnboardingScreen({ onComplete }) {
       })
       onComplete()
     } catch (e) {
+      setSaveError(e?.message || 'Tallennus epäonnistui. Yritä uudelleen.')
       setSaving(false)
     }
   }
@@ -245,6 +248,9 @@ export default function OnboardingScreen({ onComplete }) {
                 }
               </Pressable>
             </View>
+            {saveError ? (
+              <Text style={styles.saveError}>{saveError}</Text>
+            ) : null}
           </View>
         )}
 
@@ -308,4 +314,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center',
   },
   secondaryBtnText: { color: '#1a1a1a', fontSize: 14, fontWeight: '600' },
+  saveError: {
+    marginTop: 12, color: '#b91c1c', fontSize: 13, textAlign: 'center', lineHeight: 18,
+  },
 })

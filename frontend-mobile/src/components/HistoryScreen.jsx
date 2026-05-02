@@ -52,6 +52,12 @@ export default function HistoryScreen({ onClose }) {
   const [filter, setFilter] = useState('all') // 'all' | 'relevant' | 'dismissed'
 
   useEffect(() => {
+    reload()
+  }, [])
+
+  function reload() {
+    setError(null)
+    setLoading(true)
     fetchHistory(200)
       .then((data) => {
         setGroups(groupByDate(data.items))
@@ -61,7 +67,7 @@ export default function HistoryScreen({ onClose }) {
         setError(e.message)
         setLoading(false)
       })
-  }, [])
+  }
 
   const filtered =
     filter === 'all'
@@ -97,7 +103,14 @@ export default function HistoryScreen({ onClose }) {
       </View>
 
       {loading && <ActivityIndicator style={{ marginTop: 40 }} color="#1a1a1a" />}
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && (
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable style={styles.retryBtn} onPress={reload}>
+            <Text style={styles.retryBtnText}>↻ Yritä uudelleen</Text>
+          </Pressable>
+        </View>
+      )}
 
       {!loading && !error && (
         <FlatList
@@ -257,10 +270,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Georgia',
   },
+  errorWrap: {
+    alignItems: 'center',
+    marginTop: 48,
+    paddingHorizontal: 32,
+    gap: 16,
+  },
   errorText: {
     textAlign: 'center',
-    marginTop: 40,
     color: '#991b1b',
     fontSize: 14,
+    lineHeight: 20,
+  },
+  retryBtn: {
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 2,
+  },
+  retryBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 })

@@ -6,6 +6,7 @@ export default function useSessionUiState() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
+  const [fatalError, setFatalError] = useState(null)
 
   useEffect(() => {
     let isMounted = true
@@ -28,16 +29,28 @@ export default function useSessionUiState() {
     setStatusMsg(`Virhe: ${message}`)
   }
 
+  function markFatalError(error) {
+    const message = error?.message || 'Tuntematon virhe'
+    setFatalError(message)
+  }
+
+  function clearFatalError() {
+    setFatalError(null)
+  }
+
   return {
     onboardingDone,
     loading,
     busy,
     statusMsg,
+    fatalError,
     setOnboardingDone,
     setLoading,
     setBusy,
     setStatusMsg,
     setErrorStatus,
+    markFatalError,
+    clearFatalError,
     completeOnboarding,
   }
 }
