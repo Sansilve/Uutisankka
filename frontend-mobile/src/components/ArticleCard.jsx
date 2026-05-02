@@ -158,7 +158,7 @@ export default function ArticleCard({
     [disabled, pan, swipeThreshold],
   )
 
-  const lead = bulletsToLead(story.summary.bullets)
+  const lead = bulletsToLead(story.summary.bullets) || 'Artikkeli on maksumuurin takana. Lue koko juttu lähteestä.'
   const scorePercent = `${Math.min(Math.max((totalScore / 20) * 100, 0), 100)}%`
 
   return (

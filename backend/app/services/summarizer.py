@@ -155,6 +155,12 @@ def summarize_article(title: str, content: str) -> dict[str, list[str]]:
     Tries the OpenAI LLM first; falls back to the deterministic heuristic
     summariser when the API key is absent or the API call fails.
     """
+    # If content is essentially just the title (paywall / no body), don't
+    # fabricate bullets — return a single clean line instead.
+    stripped = content.strip() if content else ""
+    if len(stripped) < 120 or stripped.lower().replace(" ", "") in title.lower().replace(" ", ""):
+        return {"bullets": [], "source": "no_content"}
+
     result = _llm_summarize(title, content)
     if result is not None:
         return result
