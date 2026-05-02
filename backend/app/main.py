@@ -30,7 +30,7 @@ from .models import (
     ScoreBreakdownPayload,
     SummaryPayload,
 )
-from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics
+from .services.ingest import enrich_unprocessed_articles, ingest_feeds, rescore_all, rescore_for_topics, translate_existing_english
 
 import threading
 
@@ -54,6 +54,8 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_default_preferences()
     enrich_unprocessed_articles()
+    # Translate any English articles that were stored before this feature was added
+    asyncio.get_event_loop().run_in_executor(None, translate_existing_english)
     background_task = asyncio.create_task(periodic_ingest())
     yield
     if background_task:

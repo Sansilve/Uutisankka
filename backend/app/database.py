@@ -235,6 +235,39 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
         conn.close()
 
 
+def fetch_untranslated_english(urls: list[str]) -> list[sqlite3.Row]:
+    """English-source articles that already have summaries but NOT yet Finnish titles.
+    Identified by matching their exact URLs against the given list."""
+    if not urls:
+        return []
+    placeholders = ",".join("?" * len(urls))
+    conn = _conn()
+    try:
+        return conn.execute(
+            f"""
+            SELECT id, title, content, source, published_at, url
+            FROM articles
+            WHERE url IN ({placeholders})
+              AND summary_json != '{{"bullets": []}}'
+            ORDER BY created_at DESC
+            """,
+            urls,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def update_article_title(article_id: int, title: str) -> None:
+    """Update only the title column (used when translating existing articles)."""
+    with _db_lock:
+        conn = _conn()
+        try:
+            conn.execute("UPDATE articles SET title = ? WHERE id = ?", (title, article_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def fetch_unscored(limit: int = 5000) -> list[sqlite3.Row]:
     """Articles that have a summary but need (re-)scoring. Excludes heavy content column."""
     conn = _conn()

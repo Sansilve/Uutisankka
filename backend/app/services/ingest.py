@@ -18,12 +18,14 @@ from ..database import (
     fetch_articles_by_topics,
     fetch_unenriched,
     fetch_unscored,
+    fetch_untranslated_english,
     get_article_feedback_score,
     get_preferences,
     insert_article,
     recent_titles,
     update_article_enrichment,
     update_article_score_only,
+    update_article_title,
 )
 from .scoring import score_article
 from .summarizer import summarize_article
@@ -166,6 +168,28 @@ def enrich_unprocessed_articles() -> int:
 
     # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
     count += rescore_all(preferences)
+    return count
+
+
+def translate_existing_english() -> int:
+    """Translate titles of already-enriched English articles that are still in English.
+    Runs once after a backend upgrade; safe to call multiple times (idempotent-ish)."""
+    from ..database import _conn
+    conn = _conn()
+    all_urls = [r["url"] for r in conn.execute("SELECT url FROM articles").fetchall()]
+    conn.close()
+
+    english_urls = [u for u in all_urls if u and is_english_url(u)]
+    rows = fetch_untranslated_english(english_urls)
+    if not rows:
+        return 0
+
+    count = 0
+    for row in rows:
+        finnish_title, _ = translate_and_summarize(row["title"], row["content"] or "")
+        if finnish_title and finnish_title != row["title"]:
+            update_article_title(row["id"], finnish_title)
+            count += 1
     return count
 
 
