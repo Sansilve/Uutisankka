@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import ArticleCard from './src/components/ArticleCard'
 import HistoryScreen from './src/components/HistoryScreen'
+import OnboardingScreen from './src/components/OnboardingScreen'
 import PreferencesPanel from './src/components/PreferencesPanel'
 import {
   fetchBriefing,
