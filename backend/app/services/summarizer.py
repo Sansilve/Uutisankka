@@ -193,7 +193,8 @@ def summarize_article(title: str, content: str) -> dict[str, list[str]]:
         or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
         or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
         or has_paywall_word  # explicit paywall keyword
-        or (len(stripped) < 350 and sentence_count <= 1)  # single teaser sentence (lead-only)
+        or (len(stripped) < 200 and sentence_count <= 2)  # very short teaser (≤2 sentences, <200 chars)
+        or (len(stripped) < 350 and sentence_count <= 1)  # single teaser sentence
     )
     if is_paywall:
         return {"bullets": [], "source": "no_content"}
