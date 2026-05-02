@@ -210,6 +210,24 @@ def admin_reenrich(background_tasks: BackgroundTasks) -> dict[str, str]:
     return {"state": "started"}
 
 
+@app.post("/api/admin/resummarize")
+def admin_resummarize(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Reset all summaries so they get regenerated with the current prompt."""
+    def _do_resummarize():
+        import sqlite3
+        from .database import _conn, _db_lock
+        with _db_lock:
+            conn = _conn()
+            try:
+                conn.execute("UPDATE articles SET summary_json = '{\"bullets\": []}'")
+                conn.commit()
+            finally:
+                conn.close()
+        enrich_unprocessed_articles()
+    background_tasks.add_task(_do_resummarize)
+    return {"state": "started"}
+
+
 @app.get("/api/admin/reenrich/status")
 def reenrich_status() -> dict[str, str | int]:
     return _reenrich_status
