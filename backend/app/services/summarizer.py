@@ -1,7 +1,7 @@
 """
 Article summarizer.
 
-Primary path  : OpenAI chat completion → 3–5 Finnish bullet points.
+Primary path  : LLM (OpenAI, with fallback to secondary provider) → 3–5 Finnish bullet points.
 Fallback path : Deterministic heuristic summarizer (no API key required).
 """
 
@@ -9,26 +9,10 @@ import logging
 import re
 from collections import Counter
 
-from openai import OpenAI, OpenAIError
-
-from ..config import LLM_MODEL, OPENAI_API_KEY
+from ..config import OPENAI_API_KEY, FALLBACK_LLM_API_KEY
+from .llm import LLMUnavailable, chat_with_fallback
 
 log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Shared OpenAI client (lazy-initialised once)
-# ---------------------------------------------------------------------------
-
-_client: OpenAI | None = None
-
-
-def _get_client() -> OpenAI | None:
-    if not OPENAI_API_KEY:
-        return None
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=OPENAI_API_KEY)
-    return _client
 
 
 # ---------------------------------------------------------------------------
@@ -68,23 +52,17 @@ TÄRKEÄÄ:
 
 
 def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
-    client = _get_client()
-    if client is None:
+    if not OPENAI_API_KEY and not FALLBACK_LLM_API_KEY:
         return None
 
     user_text = f"Otsikko: {title}\n\nSisältö: {content[:2500]}"
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_text},
+    ]
 
     try:
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_text},
-            ],
-            max_tokens=400,
-            temperature=0.3,
-        )
-        raw = response.choices[0].message.content.strip()
+        raw = chat_with_fallback(messages, max_tokens=400, temperature=0.3)
         bullets = [
             line.lstrip("•*-– ").strip()
             for line in raw.splitlines()
@@ -93,8 +71,8 @@ def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
         bullets = [b for b in bullets if len(b) > 10]
         if bullets:
             return {"bullets": bullets[:5], "source": "llm"}
-    except OpenAIError as exc:
-        log.warning("_llm_summarize: OpenAI API error – %s", exc)
+    except LLMUnavailable as exc:
+        log.warning("_llm_summarize: all LLM providers failed – %s", exc)
 
     return None
 
