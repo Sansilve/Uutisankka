@@ -19,15 +19,15 @@ TOPIC_KEYWORDS: dict[str, list[str]] = {
     "talous": [
         "inflaatio", "bkt", "talous", "kauppa", "markkinat", "korkojen", "työllisyys",
         "vienti", "tuonti", "pörssit", "osakekurssi", "pankki", "lainaa", "verotus",
-        "yrittäjä", "yritys", "liikevaihto", "tulos", "voitto", "tappio", "konkurssi",
+        "yrittäjä", "yritys", "liikevaihto", "liikevoitto", "liiketappio", "konkurssi",
         "inflation", "gdp", "economy", "market", "interest rate", "trade", "employment",
         "revenue", "profit", "bankruptcy", "stock", "shares", "finance",
     ],
     "teknologia": [
-        "tekoäly", "ai", "ohjelmisto", "siru", "startup", "kyber", "pilvi", "data",
+        "tekoäly", "ohjelmisto", "siru", "startup", "kyber", "pilvi", "data",
         "robotti", "sovellus", "älypuhelin", "tietoturva", "digitalisaatio", "koneoppiminen",
         "software", "chip", "tech", "cyber", "cloud", "algorithm", "machine learning",
-        "automation", "semiconductor", "quantum", "5g", "blockchain",
+        "automation", "semiconductor", "quantum", "5g", "blockchain", "artificial intelligence",
     ],
     "urheilu": [
         "jalkapallo", "jääkiekko", "yleisurheilu", "tennis", "koripallo", "pesäpallo",
@@ -138,6 +138,9 @@ LOW_SIGNAL_PATTERNS = [
     r"list of",
     r"watch:|video:",
     r"live updates",
+    r"loto(n|ssa|ssa on|tta)",      # Lotto results
+    r"oikea rivi",                   # Lotto "right row" result post
+    r"arpajaistulokset",
 ]
 
 BREAKING_HINTS = ["breaking", "urgent", "developing", "juuri nyt", "äskettäin", "tärkeää"]
