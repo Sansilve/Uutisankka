@@ -10,7 +10,7 @@ from urllib.request import urlopen
 
 import feedparser
 
-from ..config import DEFAULT_FEEDS
+from ..config import DEFAULT_FEEDS, FEED_REGIONS
 from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
@@ -75,6 +75,26 @@ def _is_near_duplicate(title: str, existing_titles: list[str]) -> bool:
     return False
 
 
+_PAYWALL_FEED_KEYWORDS = [
+    "tilaajille", "vain tilaajille", "subscribers only", "premium",
+]
+
+
+def _is_feed_paywall(entry: Any, content: str) -> bool:
+    """Detect paywall from RSS entry tags or content keywords."""
+    # Check feedparser tags list
+    tags = entry.get("tags") or []
+    for tag in tags:
+        term = (tag.get("term") or "").lower()
+        if any(w in term for w in _PAYWALL_FEED_KEYWORDS):
+            return True
+    # Check content text
+    content_lower = content.lower()
+    if any(w in content_lower for w in _PAYWALL_FEED_KEYWORDS):
+        return True
+    return False
+
+
 def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
     feeds = feed_urls or DEFAULT_FEEDS
     fetched = 0
@@ -115,6 +135,8 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
                 "content": content,
                 "url": link,
                 "content_hash": content_hash,
+                "region": FEED_REGIONS.get(url, "suomi"),
+                "is_paywall_hint": _is_feed_paywall(entry, content),
             }
 
             if insert_article(article):
@@ -147,7 +169,7 @@ def enrich_unprocessed_articles() -> int:
             finnish_title, summary = translate_and_summarize(row["title"], content)
         else:
             finnish_title = None
-            summary = summarize_article(row["title"], content)
+            summary = summarize_article(row["title"], content, row["source"])
 
         # Score using the (potentially translated) title for better Finnish keyword matching
         score_title = finnish_title or row["title"]

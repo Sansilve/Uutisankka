@@ -158,7 +158,7 @@ export default function ArticleCard({
     [disabled, pan, swipeThreshold],
   )
 
-  const lead = bulletsToLead(story.summary.bullets)
+  const lead = bulletsToLead(story.summary.bullets) || 'Artikkeli on maksumuurin takana. Lue koko juttu lähteestä.'
   const scorePercent = `${Math.min(Math.max((totalScore / 20) * 100, 0), 100)}%`
 
   return (
@@ -214,6 +214,11 @@ export default function ArticleCard({
                   </Text>
                 </View>
               ))}
+              {story.is_paywall && (
+                <View style={styles.paywallBadge}>
+                  <Text style={styles.paywallBadgeText}>🔒 Maksumuuri</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.dateText}>{todayFi()}</Text>
           </View>
@@ -221,6 +226,8 @@ export default function ArticleCard({
           <Text style={[styles.title, isCompact && styles.titleCompact]}>{story.title}</Text>
 
           <View style={styles.titleRule} />
+
+          <Text style={styles.sourceText}>📰 {story.source}</Text>
 
           <Text style={[styles.lead, isCompact && styles.leadCompact]}>{lead}</Text>
 
@@ -419,6 +426,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
+  paywallBadge: {
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    borderRadius: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: '#f3f4f6',
+  },
+  paywallBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6b7280',
+    letterSpacing: 0.5,
+  },
   dateText: {
     color: '#9ca3af',
     fontSize: 11,
@@ -442,6 +463,13 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: '#1a1a1a',
     marginBottom: 14,
+  },
+  sourceText: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 12,
+    letterSpacing: 0.3,
   },
   lead: {
     color: '#1a1a1a',

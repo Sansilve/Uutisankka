@@ -11,6 +11,7 @@ from .database import (
     apply_feedback,
     ensure_default_preferences,
     get_preferences,
+    list_articles,
     get_swipe_history,
     init_db,
     random_briefing,
@@ -19,7 +20,10 @@ from .database import (
     top_feedback_metrics,
     upsert_preferences,
 )
+from .config import LOCAL_CITIES
 from .models import (
+    AllNewsItem,
+    AllNewsResponse,
     ArticleBrief,
     BriefingResponse,
     FeedbackPayload,
@@ -42,11 +46,11 @@ _reenrich_status: dict[str, str | int] = {"state": "idle", "enriched": 0}
 
 
 async def periodic_ingest() -> None:
+    loop = asyncio.get_event_loop()
     while True:
         try:
-            ingest_feeds()
+            await loop.run_in_executor(None, ingest_feeds)
         except Exception:
-            # Keep the loop alive even if one feed cycle fails.
             pass
         await asyncio.sleep(30 * 60)
 
@@ -56,9 +60,6 @@ async def lifespan(app: FastAPI):
     global background_task
     init_db()
     ensure_default_preferences()
-    enrich_unprocessed_articles()
-    # Translate any English articles that were stored before this feature was added
-    asyncio.get_event_loop().run_in_executor(None, translate_existing_english)
     background_task = asyncio.create_task(periodic_ingest())
     yield
     if background_task:
@@ -105,9 +106,15 @@ def read_preferences() -> PreferenceProfile:
 @app.put("/api/preferences", response_model=PreferenceProfile)
 def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTasks) -> PreferenceProfile:
     old_prefs = get_preferences()
-    upsert_preferences(payload.interests, payload.disliked_topics)
+    upsert_preferences(
+        payload.interests,
+        payload.disliked_topics,
+        news_scope=payload.news_scope,
+        local_city=payload.local_city,
+        hide_paywall=payload.hide_paywall,
+        excluded_sources=payload.excluded_sources,
+    )
     new_prefs = get_preferences()
-    # Compute which topics actually changed so we can do a targeted rescore.
     changed_topics = _diff_topics(old_prefs, new_prefs)
     background_tasks.add_task(_reenrich_changed, changed_topics, new_prefs)
     return PreferenceProfile(**new_prefs)
@@ -159,19 +166,49 @@ def _rows_to_briefing(rows) -> BriefingResponse:
                 topics=topics,
                 summary=SummaryPayload(**summary),
                 score_breakdown=ScoreBreakdownPayload(**score_breakdown),
+                is_paywall=bool(row["is_paywall"]),
             )
         )
     return BriefingResponse(generated_at=datetime.utcnow(), total=len(stories), stories=stories)
 
 
+def _scope_to_regions(prefs: dict) -> list[str] | None:
+    """Convert news_scope + local_city preference to region filter list for DB queries."""
+    scope: list[str] = prefs.get("news_scope") or ["suomi", "maailma"]
+    city: str = prefs.get("local_city") or ""
+    regions: list[str] = []
+    for s in scope:
+        if s == "suomi":
+            regions.append("suomi")
+        elif s == "maailma":
+            regions.append("maailma")
+        elif s == "paikalliset" and city in LOCAL_CITIES:
+            regions.append(f"paikalliset:{city}")
+    return regions if regions else None
+
+
 @app.get("/api/briefing", response_model=BriefingResponse)
 def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
-    return _rows_to_briefing(top_briefing(limit))
+    prefs = get_preferences()
+    return _rows_to_briefing(top_briefing(
+        limit,
+        region_filters=_scope_to_regions(prefs),
+        disliked_topics=prefs.get("disliked_topics") or None,
+        hide_paywall=prefs.get("hide_paywall", True),
+        excluded_sources=prefs.get("excluded_sources") or None,
+    ))
 
 
 @app.get("/api/briefing/random", response_model=BriefingResponse)
 def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
-    return _rows_to_briefing(random_briefing(limit))
+    prefs = get_preferences()
+    return _rows_to_briefing(random_briefing(
+        limit,
+        region_filters=_scope_to_regions(prefs),
+        disliked_topics=prefs.get("disliked_topics") or None,
+        hide_paywall=prefs.get("hide_paywall", True),
+        excluded_sources=prefs.get("excluded_sources") or None,
+    ))
 
 
 @app.post("/api/admin/reenrich")
@@ -180,6 +217,24 @@ def admin_reenrich(background_tasks: BackgroundTasks) -> dict[str, str]:
     if _reenrich_status["state"] == "running":
         return {"state": "already_running"}
     background_tasks.add_task(_reenrich_changed, [], get_preferences())  # [] = full rescore
+    return {"state": "started"}
+
+
+@app.post("/api/admin/resummarize")
+def admin_resummarize(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Reset all summaries so they get regenerated with the current prompt."""
+    def _do_resummarize():
+        import sqlite3
+        from .database import _conn, _db_lock
+        with _db_lock:
+            conn = _conn()
+            try:
+                conn.execute("UPDATE articles SET summary_json = '{\"bullets\": []}'")
+                conn.commit()
+            finally:
+                conn.close()
+        enrich_unprocessed_articles()
+    background_tasks.add_task(_do_resummarize)
     return {"state": "started"}
 
 
@@ -220,3 +275,34 @@ def get_history(limit: int = Query(default=100, ge=1, le=500)) -> HistoryRespons
             )
         )
     return HistoryResponse(total=len(items), items=items)
+
+
+@app.get("/api/articles", response_model=AllNewsResponse)
+def get_all_articles(
+    limit: int = Query(default=300, ge=1, le=1000),
+    include_paywall: bool = Query(default=False),
+) -> AllNewsResponse:
+    """Development endpoint: browse all latest articles, not just swiped or briefing picks."""
+    prefs = get_preferences()
+    rows = list_articles(
+        limit=limit,
+        region_filters=_scope_to_regions(prefs),
+        hide_paywall=False if include_paywall else prefs.get("hide_paywall", True),
+        excluded_sources=prefs.get("excluded_sources") or None,
+    )
+    items: list[AllNewsItem] = []
+    for row in rows:
+        items.append(
+            AllNewsItem(
+                id=row["id"],
+                title=row["title"],
+                source=row["source"],
+                region=row["region"],
+                published_at=row["published_at"],
+                url=row["url"],
+                topics=json.loads(row["topics"] or "[]"),
+                summary=json.loads(row["summary_json"] or '{"bullets": []}'),
+                is_paywall=bool(row["is_paywall"]),
+            )
+        )
+    return AllNewsResponse(total=len(items), items=items)

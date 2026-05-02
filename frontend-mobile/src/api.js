@@ -39,6 +39,8 @@ export const sendFeedback = (payload) =>
   request('/api/feedback', { method: 'POST', body: JSON.stringify(payload) })
 export const fetchMetrics = (limit = 10) => request(`/api/metrics?limit=${limit}`)
 export const fetchHistory = (limit = 100) => request(`/api/history?limit=${limit}`)
+export const fetchAllArticles = (limit = 300, includePaywall = false) =>
+  request(`/api/articles?limit=${limit}&include_paywall=${includePaywall ? 'true' : 'false'}`)
 export const triggerIngest = () => request('/api/ingest', { method: 'POST' })
 export const triggerReenrich = () => request('/api/admin/reenrich', { method: 'POST' })
 export const fetchReenrichStatus = () => request('/api/admin/reenrich/status')

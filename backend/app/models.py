@@ -5,13 +5,21 @@ from pydantic import BaseModel, Field
 
 
 class PreferenceProfile(BaseModel):
-    interests: List[str] = Field(default_factory=lambda: ["technology", "politics", "economy"])
-    disliked_topics: List[str] = Field(default_factory=lambda: ["celebrity", "entertainment"])
+    interests: List[str] = Field(default_factory=lambda: ["politiikka", "teknologia", "talous"])
+    disliked_topics: List[str] = Field(default_factory=lambda: ["viihde", "celebrity"])
+    news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
+    local_city: str = ""
+    hide_paywall: bool = False
+    excluded_sources: List[str] = Field(default_factory=list)
 
 
 class PreferenceUpdate(BaseModel):
     interests: List[str]
     disliked_topics: List[str]
+    news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
+    local_city: str = ""
+    hide_paywall: bool = False
+    excluded_sources: List[str] = Field(default_factory=list)
 
 
 class SummaryPayload(BaseModel):
@@ -41,6 +49,7 @@ class ArticleBrief(BaseModel):
     topics: List[str]
     summary: SummaryPayload
     score_breakdown: ScoreBreakdownPayload
+    is_paywall: bool = False
 
 
 class IngestResponse(BaseModel):
@@ -91,3 +100,20 @@ class SwipeHistoryItem(BaseModel):
 class HistoryResponse(BaseModel):
     total: int
     items: List[SwipeHistoryItem]
+
+
+class AllNewsItem(BaseModel):
+    id: int
+    title: str
+    source: str
+    region: str
+    published_at: datetime | None
+    url: str
+    topics: List[str]
+    summary: SummaryPayload
+    is_paywall: bool = False
+
+
+class AllNewsResponse(BaseModel):
+    total: int
+    items: List[AllNewsItem]
