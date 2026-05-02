@@ -214,15 +214,25 @@ def enrich_unprocessed_articles() -> int:
         content_hash = row["content_hash"]
 
         # If RSS content is absent or too short to summarise, try scraping the URL.
+        # Track whether scraping was attempted so we can infer paywall if it fails.
+        scrape_attempted = False
         if len(content.strip()) < _MIN_CONTENT_LENGTH and url:
+            scrape_attempted = True
             scraped = _scrape_article_content(url)
             if len(scraped) > len(content):
                 log.debug("enrich: scraped %d chars from %s (was %d)", len(scraped), url, len(content))
                 content = scraped
+            else:
+                log.debug("enrich: scraping yielded nothing for %s – likely paywalled", url)
 
+        # If we tried scraping but still have no useful content, the article is likely
+        # behind a paywall or login wall. Mark it as paywall directly and skip LLM.
+        if scrape_attempted and len(content.strip()) < _MIN_CONTENT_LENGTH:
+            log.debug("enrich: marking as paywall (scrape failed, no content) for %s", url)
+            summary = {"bullets": [], "source": "no_content"}
+            finnish_title = None
         # --- Cache lookup ---
-        cached = get_llm_cache(content_hash)
-        if cached:
+        elif cached := get_llm_cache(content_hash):
             log.debug("enrich_unprocessed_articles: cache hit for %s", url)
             summary = json.loads(cached["summary_json"])
             finnish_title = cached["translated_title"]
