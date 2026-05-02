@@ -25,9 +25,11 @@ FEED_REGIONS: dict[str, str] = {
     "https://www.iltalehti.fi/rss/uutiset.xml": "suomi",
     "https://www.is.fi/rss/tuoreimmat.xml": "suomi",
     "https://www.verkkouutiset.fi/rss": "suomi",
+    "https://www.uusisuomi.fi/api/feed/v2/rss/us": "suomi",
     "https://www.maaseuduntulevaisuus.fi/feeds/maaseuduntulevaisuus": "suomi",
     # Finland national – English
     "https://finlandtoday.fi/feed": "suomi",
+    "https://www.helsinkitimes.fi/?format=feed": "suomi",
     # Finland national – Finnish
     "https://ku.fi/feed": "suomi",
     "https://aamuposti.fi/feed/rss": "suomi",
