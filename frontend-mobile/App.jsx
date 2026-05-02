@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useEffect } from 'react'
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -16,6 +15,11 @@ import AllNewsScreen from './src/components/AllNewsScreen'
 import HistoryScreen from './src/components/HistoryScreen'
 import OnboardingScreen from './src/components/OnboardingScreen'
 import PreferencesPanel from './src/components/PreferencesPanel'
+import useAppNavigation from './src/navigation/useAppNavigation'
+import { APP_ROUTES } from './src/navigation/routes'
+import useBriefingState from './src/state/useBriefingState'
+import usePreferencesState from './src/state/usePreferencesState'
+import useSessionUiState from './src/state/useSessionUiState'
 import {
   fetchBriefing,
   fetchMetrics,
@@ -121,28 +125,36 @@ function CompletionScreen({ ratings, onRestart, onShowMore, onOpenSettings }) {
 }
 
 export default function App() {
-  const { width } = useWindowDimensions()
-  const isCompact = width < 560
-  const [screen, setScreen] = useState('feed')
-  const [onboardingDone, setOnboardingDone] = useState(null) // null = checking
-  const [briefing, setBriefing] = useState([])
-  const [preferences, setPreferences] = useState({ interests: [], disliked_topics: [] })
-  const [metrics, setMetrics] = useState(null)
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [ratings, setRatings] = useState([])
-  const [surpriseStory, setSurpriseStory] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [statusMsg, setStatusMsg] = useState('')
-
-  function applyBriefingState(briefingData, prefData, metricsData) {
-    setBriefing(briefingData.stories)
-    setPreferences(prefData)
-    setMetrics(metricsData)
-    setCurrentIndex(0)
-    setRatings([])
-    setSurpriseStory(null)
-  }
+  useWindowDimensions()
+  const { route, openFeed, openHistory, openAllNews, openSettings } = useAppNavigation()
+  const { preferences, applyPreferences } = usePreferencesState()
+  const {
+    ratings,
+    activeStory,
+    isShowingSurprise,
+    total,
+    progressCount,
+    progressWidth,
+    isComplete,
+    metricsText,
+    applyBriefingData,
+    addRating,
+    moveToNextStory,
+    clearSurpriseStory,
+    resetReadingSession,
+    setSurpriseStory,
+  } = useBriefingState(DAILY_LIMIT)
+  const {
+    onboardingDone,
+    loading,
+    busy,
+    statusMsg,
+    setLoading,
+    setBusy,
+    setStatusMsg,
+    setErrorStatus,
+    completeOnboarding,
+  } = useSessionUiState()
 
   async function loadData() {
     try {
@@ -151,46 +163,31 @@ export default function App() {
         fetchPreferences(),
         fetchMetrics(DAILY_LIMIT),
       ])
-      applyBriefingState(briefingData, prefData, metricsData)
+      applyBriefingData(briefingData, metricsData)
+      applyPreferences(prefData)
     } catch (error) {
-      setStatusMsg(`Virhe: ${error.message}`)
+      setErrorStatus(error)
     }
   }
 
   useEffect(() => {
-    AsyncStorage.getItem('onboarding_done').then((val) => {
-      setOnboardingDone(val === 'true')
-    })
-  }, [])
-
-  useEffect(() => {
     loadData().finally(() => setLoading(false))
   }, [])
-
-  const activeStory = surpriseStory || briefing[currentIndex]
-  const total = briefing.length || DAILY_LIMIT
-  const progressCount = Math.min(currentIndex + 1, total)
-  const progressRatio = total ? progressCount / total : 0
-  const progressWidth = `${Math.max(progressRatio, 0.02) * 100}%`
-  const isComplete = !loading && !surpriseStory && currentIndex >= briefing.length && briefing.length > 0
 
   async function handleDecision(isRelevant) {
     if (!activeStory) return
     setBusy(true)
     try {
       await sendFeedback({ article_id: activeStory.id, is_relevant: isRelevant })
-      setRatings((prev) => [
-        ...prev,
-        { articleId: activeStory.id, isRelevant, surprise: Boolean(surpriseStory) },
-      ])
+      addRating(activeStory.id, isRelevant, isShowingSurprise)
       setStatusMsg(isRelevant ? 'Merkitty kiinnostavaksi' : 'Ohitettu')
-      if (surpriseStory) {
-        setSurpriseStory(null)
+      if (isShowingSurprise) {
+        clearSurpriseStory()
       } else {
-        setCurrentIndex((v) => v + 1)
+        moveToNextStory()
       }
     } catch (error) {
-      setStatusMsg(`Virhe: ${error.message}`)
+      setErrorStatus(error)
     } finally {
       setBusy(false)
     }
@@ -208,7 +205,7 @@ export default function App() {
         setStatusMsg('Yllätysuutinen haettu.')
       }
     } catch (error) {
-      setStatusMsg(`Virhe: ${error.message}`)
+      setErrorStatus(error)
     } finally {
       setBusy(false)
     }
@@ -227,29 +224,22 @@ export default function App() {
           fetchPreferences(),
           fetchMetrics(DAILY_LIMIT),
         ])
-        applyBriefingState(briefingData, prefData, metricsData)
+        applyBriefingData(briefingData, metricsData)
+        applyPreferences(prefData)
         setStatusMsg('Ei uusia uutisia juuri nyt - näytetään toinen kierros valikoidusta arkistosta.')
       }
-      setScreen('feed')
+      openFeed()
     } catch (error) {
-      setStatusMsg(`Virhe: ${error.message}`)
+      setErrorStatus(error)
     } finally {
       setBusy(false)
     }
   }
 
   function handleRestart() {
-    setCurrentIndex(0)
-    setRatings([])
-    setSurpriseStory(null)
-    setScreen('feed')
+    resetReadingSession()
+    openFeed()
   }
-
-  const metricsText = useMemo(() => {
-    if (!metrics) return ''
-    if (metrics.positive_feedback_ratio === null) return 'Ei palautetta vielä'
-    return `${Math.round(metrics.positive_feedback_ratio * 100)}% relevanttia · ${metrics.total_feedback_votes} ääntä`
-  }, [metrics])
 
   if (loading || onboardingDone === null) {
     return (
@@ -267,8 +257,7 @@ export default function App() {
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         <OnboardingScreen
           onComplete={async () => {
-            await AsyncStorage.setItem('onboarding_done', 'true')
-            setOnboardingDone(true)
+            await completeOnboarding()
             await loadData()
           }}
         />
@@ -276,30 +265,30 @@ export default function App() {
     )
   }
 
-  if (screen === 'history') {
+  if (route === APP_ROUTES.HISTORY) {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-        <HistoryScreen onClose={() => setScreen('feed')} />
+        <HistoryScreen onClose={openFeed} />
       </SafeAreaView>
     )
   }
 
-  if (screen === 'all-news') {
+  if (route === APP_ROUTES.ALL_NEWS) {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-        <AllNewsScreen onClose={() => setScreen('feed')} />
+        <AllNewsScreen onClose={openFeed} />
       </SafeAreaView>
     )
   }
 
-  if (screen === 'settings') {
+  if (route === APP_ROUTES.SETTINGS) {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         <View style={styles.sheetHeader}>
-          <TouchableOpacity onPress={() => setScreen('feed')}>
+          <TouchableOpacity onPress={openFeed}>
             <Text style={styles.backButton}>← Takaisin</Text>
           </TouchableOpacity>
           <Text style={styles.sheetTitle}>Asetukset</Text>
@@ -310,7 +299,7 @@ export default function App() {
           preferences={preferences}
           onSaved={async () => {
             await loadData()
-            setScreen('feed')
+            openFeed()
           }}
         />
       </SafeAreaView>
@@ -323,9 +312,9 @@ export default function App() {
 
       <Masthead
         metricsText={metricsText}
-        onOpenSettings={() => setScreen('settings')}
-        onOpenHistory={() => setScreen('history')}
-        onOpenAllNews={() => setScreen('all-news')}
+        onOpenSettings={openSettings}
+        onOpenHistory={openHistory}
+        onOpenAllNews={openAllNews}
       />
 
       {statusMsg ? (
@@ -339,7 +328,7 @@ export default function App() {
           ratings={ratings.filter((item) => !item.surprise)}
           onRestart={handleRestart}
           onShowMore={handleShowMore}
-          onOpenSettings={() => setScreen('settings')}
+          onOpenSettings={openSettings}
         />
       ) : activeStory ? (
         <ArticleCard
