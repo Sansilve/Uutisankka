@@ -108,6 +108,7 @@ def update_preferences(payload: PreferenceUpdate, background_tasks: BackgroundTa
         payload.disliked_topics,
         news_scope=payload.news_scope,
         local_city=payload.local_city,
+        hide_paywall=payload.hide_paywall,
     )
     new_prefs = get_preferences()
     changed_topics = _diff_topics(old_prefs, new_prefs)
@@ -161,6 +162,7 @@ def _rows_to_briefing(rows) -> BriefingResponse:
                 topics=topics,
                 summary=SummaryPayload(**summary),
                 score_breakdown=ScoreBreakdownPayload(**score_breakdown),
+                is_paywall=bool(row["is_paywall"]),
             )
         )
     return BriefingResponse(generated_at=datetime.utcnow(), total=len(stories), stories=stories)
@@ -188,6 +190,7 @@ def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingRespons
         limit,
         region_filters=_scope_to_regions(prefs),
         disliked_topics=prefs.get("disliked_topics") or None,
+        hide_paywall=prefs.get("hide_paywall", False),
     ))
 
 
@@ -198,6 +201,7 @@ def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> Briefing
         limit,
         region_filters=_scope_to_regions(prefs),
         disliked_topics=prefs.get("disliked_topics") or None,
+        hide_paywall=prefs.get("hide_paywall", False),
     ))
 
 

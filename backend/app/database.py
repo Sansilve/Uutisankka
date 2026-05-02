@@ -83,8 +83,10 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "feedback_score", "REAL DEFAULT 0")
             _ensure_column(conn, "articles", "score_breakdown_json", "TEXT DEFAULT '{\"items\": []}'")
             _ensure_column(conn, "articles", "region", "TEXT NOT NULL DEFAULT 'suomi'")
+            _ensure_column(conn, "articles", "is_paywall", "INTEGER NOT NULL DEFAULT 0")
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
+            _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 0")
             conn.commit()
         finally:
             conn.close()
@@ -101,6 +103,7 @@ def upsert_preferences(
     disliked_topics: list[str],
     news_scope: list[str] | None = None,
     local_city: str = "",
+    hide_paywall: bool = False,
     only_if_missing: bool = False,
 ) -> None:
     with _db_lock:
@@ -118,18 +121,18 @@ def upsert_preferences(
                 conn.execute(
                     """
                     UPDATE user_preferences
-                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, updated_at = ?
+                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, updated_at = ?
                     WHERE user_id = 1
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), timestamp),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, updated_at)
-                    VALUES (1, ?, ?, ?, ?, ?)
+                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?, ?)
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), timestamp),
                 )
             conn.commit()
         finally:
@@ -140,7 +143,7 @@ def get_preferences() -> dict:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT interests, disliked_topics, news_scope, local_city FROM user_preferences WHERE user_id = 1"
+            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall FROM user_preferences WHERE user_id = 1"
         ).fetchone()
         if not row:
             return {
@@ -148,18 +151,20 @@ def get_preferences() -> dict:
                 "disliked_topics": ["viihde", "celebrity"],
                 "news_scope": ["suomi", "maailma"],
                 "local_city": "",
+                "hide_paywall": False,
             }
         return {
             "interests": json.loads(row["interests"]),
             "disliked_topics": json.loads(row["disliked_topics"]),
             "news_scope": json.loads(row["news_scope"] or '["suomi","maailma"]'),
             "local_city": row["local_city"] or "",
+            "hide_paywall": bool(row["hide_paywall"]),
         }
     finally:
         conn.close()
 
 
-def random_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None) -> list:
+def random_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False) -> list:
     """Return *limit* random enriched articles (score > 0), shuffled each call."""
     conn = _conn()
     try:
@@ -180,6 +185,8 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
               )"""
             params.extend(disliked_topics)
 
+        where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+
         params.append(limit)
         rows = conn.execute(
             f"""
@@ -187,6 +194,7 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
                 a.id, a.title, a.source, a.published_at, a.url,
                 a.score, a.base_score, a.feedback_score,
                 a.topics, a.summary_json, a.score_breakdown_json,
+                a.is_paywall,
                 COALESCE(f.positive_count, 0) AS feedback_positive,
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
@@ -194,6 +202,7 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
             WHERE a.score > 0
               {where_region}
               {where_dislikes}
+              {where_paywall}
             ORDER BY RANDOM()
             LIMIT ?
             """,
@@ -432,6 +441,7 @@ def update_article_enrichment(
     score_breakdown: dict[str, Any],
     translated_title: str | None = None,
 ) -> None:
+    is_paywall = 1 if summary.get("source") == "no_content" else 0
     with _db_lock:
         conn = _conn()
         try:
@@ -440,7 +450,7 @@ def update_article_enrichment(
                     """
                     UPDATE articles
                     SET title = ?, base_score = ?, score = ?, topics = ?,
-                        summary_json = ?, score_breakdown_json = ?
+                        summary_json = ?, score_breakdown_json = ?, is_paywall = ?
                     WHERE id = ?
                     """,
                     (
@@ -450,6 +460,7 @@ def update_article_enrichment(
                         json.dumps(topics),
                         json.dumps(summary),
                         json.dumps(score_breakdown),
+                        is_paywall,
                         article_id,
                     ),
                 )
@@ -457,7 +468,7 @@ def update_article_enrichment(
                 conn.execute(
                     """
                     UPDATE articles
-                    SET base_score = ?, score = ?, topics = ?, summary_json = ?, score_breakdown_json = ?
+                    SET base_score = ?, score = ?, topics = ?, summary_json = ?, score_breakdown_json = ?, is_paywall = ?
                     WHERE id = ?
                     """,
                     (
@@ -466,6 +477,7 @@ def update_article_enrichment(
                         json.dumps(topics),
                         json.dumps(summary),
                         json.dumps(score_breakdown),
+                        is_paywall,
                         article_id,
                     ),
                 )
@@ -583,7 +595,7 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
             conn.close()
 
 
-def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None) -> list[sqlite3.Row]:
+def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False) -> list[sqlite3.Row]:
     conn = _conn()
     try:
         params: list = []
@@ -603,6 +615,8 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
               )"""
             params.extend(disliked_topics)
 
+        where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+
         params.append(limit)
         return conn.execute(
             f"""
@@ -618,6 +632,7 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
                 a.topics,
                 a.summary_json,
                 a.score_breakdown_json,
+                a.is_paywall,
                 COALESCE(f.positive_count, 0) AS feedback_positive,
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
@@ -627,6 +642,7 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
                    OR datetime(a.published_at) >= datetime('now', '-48 hours'))
               {where_region}
               {where_dislikes}
+              {where_paywall}
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,

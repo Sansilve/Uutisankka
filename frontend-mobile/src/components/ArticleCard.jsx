@@ -214,6 +214,11 @@ export default function ArticleCard({
                   </Text>
                 </View>
               ))}
+              {story.is_paywall && (
+                <View style={styles.paywallBadge}>
+                  <Text style={styles.paywallBadgeText}>🔒 Maksumuuri</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.dateText}>{todayFi()}</Text>
           </View>
@@ -418,6 +423,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  paywallBadge: {
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    borderRadius: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: '#f3f4f6',
+  },
+  paywallBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6b7280',
+    letterSpacing: 0.5,
   },
   dateText: {
     color: '#9ca3af',

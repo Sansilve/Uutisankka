@@ -9,6 +9,7 @@ class PreferenceProfile(BaseModel):
     disliked_topics: List[str] = Field(default_factory=lambda: ["viihde", "celebrity"])
     news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
     local_city: str = ""
+    hide_paywall: bool = False
 
 
 class PreferenceUpdate(BaseModel):
@@ -16,6 +17,7 @@ class PreferenceUpdate(BaseModel):
     disliked_topics: List[str]
     news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
     local_city: str = ""
+    hide_paywall: bool = False
 
 
 class SummaryPayload(BaseModel):
@@ -45,6 +47,7 @@ class ArticleBrief(BaseModel):
     topics: List[str]
     summary: SummaryPayload
     score_breakdown: ScoreBreakdownPayload
+    is_paywall: bool = False
 
 
 class IngestResponse(BaseModel):

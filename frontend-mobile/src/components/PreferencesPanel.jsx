@@ -50,6 +50,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
   const [dislikes, setDislikes]   = useState(new Set(preferences.disliked_topics || []))
   const [scope, setScope]         = useState(new Set(preferences.news_scope || ['suomi', 'maailma']))
   const [city, setCity]           = useState(preferences.local_city || '')
+  const [hidePaywall, setHidePaywall] = useState(preferences.hide_paywall || false)
   const [saving, setSaving]       = useState(false)
   const [status, setStatus]       = useState('')
   const [unsaved, setUnsaved]     = useState(false)
@@ -127,6 +128,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
         disliked_topics: [...dislikes],
         news_scope: [...scope],
         local_city: city,
+        hide_paywall: hidePaywall,
       })
       setUnsaved(false)
       setStatus('Tallennettu – pisteytetään...')
@@ -221,6 +223,21 @@ export default function PreferencesPanel({ preferences, onSaved }) {
 
         {unsaved && <Text style={styles.unsaved}>Tallentamattomat muutokset</Text>}
 
+        <Text style={styles.sectionLabel}>Muut asetukset</Text>
+        <TouchableOpacity
+          style={styles.toggleRow}
+          onPress={() => { setHidePaywall((v) => !v); setUnsaved(true) }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.toggleInfo}>
+            <Text style={styles.toggleLabel}>Piilota maksumuuriartikkelit</Text>
+            <Text style={styles.toggleDesc}>Artikkelit joita ei voi lukea ilmaiseksi piilotetaan</Text>
+          </View>
+          <View style={[styles.toggleSwitch, hidePaywall && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleThumb, hidePaywall && styles.toggleThumbOn]} />
+          </View>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.saveBtn, (!unsaved || saving) && styles.saveBtnDisabled]}
           onPress={save}
@@ -275,6 +292,24 @@ const styles = StyleSheet.create({
     marginTop: 12, fontSize: 12, color: '#92400e',
     textAlign: 'center', fontWeight: '600', letterSpacing: 0.3,
   },
+  toggleRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 12, paddingVertical: 12, paddingHorizontal: 12,
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 4,
+  },
+  toggleInfo: { flex: 1, marginRight: 16 },
+  toggleLabel: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
+  toggleDesc: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  toggleSwitch: {
+    width: 44, height: 24, borderRadius: 12, backgroundColor: '#d1d5db',
+    justifyContent: 'center', paddingHorizontal: 2,
+  },
+  toggleSwitchOn: { backgroundColor: '#1a1a1a' },
+  toggleThumb: {
+    width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff',
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+  },
+  toggleThumbOn: { alignSelf: 'flex-end' },
   saveBtn: { marginTop: 20, backgroundColor: '#1a1a1a', borderRadius: 2, paddingVertical: 14, alignItems: 'center' },
   saveBtnDisabled: { backgroundColor: '#d1d5db' },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
