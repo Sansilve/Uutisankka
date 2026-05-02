@@ -161,7 +161,7 @@ def _deterministic_summarize(title: str, content: str) -> dict[str, list[str]]:
 # Public interface (unchanged signature — ingest.py calls this)
 # ---------------------------------------------------------------------------
 
-def summarize_article(title: str, content: str) -> dict[str, list[str]]:
+def summarize_article(title: str, content: str, source: str = "") -> dict[str, list[str]]:
     """Return a summary dict with key 'bullets' (list of strings).
 
     Tries the OpenAI LLM first; falls back to the deterministic heuristic
@@ -177,6 +177,8 @@ def summarize_article(title: str, content: str) -> dict[str, list[str]]:
         return re.sub(r"\s+", " ", s.lower().strip())
     norm_content = _norm(stripped)
     norm_title = _norm(title_stripped)
+    source_norm = _norm(source)
+
     # Paywall keywords in Finnish/English that indicate subscriber-only content
     _PAYWALL_WORDS = [
         "tilaajille", "tilaa", "vain tilaajille", "maksullinen",
@@ -184,19 +186,46 @@ def summarize_article(title: str, content: str) -> dict[str, list[str]]:
     ]
     has_paywall_word = any(w in norm_content for w in _PAYWALL_WORDS)
 
+    # Many international wire/public-broadcaster feeds are free by design.
+    # For those, avoid aggressive "short teaser" rules to reduce false positives.
+    _FREE_SOURCE_HINTS = [
+        "guardian", "bbc", "reuters", "nyt", "new york times", "washington post",
+        "al jazeera", "france 24", "sky news", "rfi", "upi", "npr", "cnn", "dw",
+        "euronews", "time", "latimes", "la times", "independent", "financial times",
+        "global news", "yle",
+    ]
+    _PAYWALLED_SOURCE_HINTS = [
+        "helsingin sanomat", "aamulehti", "iltalehti", "ilta-sanomat",
+        "satakunnan", "hameen sanomat", "ksml", "savonsanomat", "kaleva",
+        "uusimaa", "esaimaa", "aamuposti", "maaseudun tulevaisuus",
+    ]
+    is_likely_free_source = any(h in source_norm for h in _FREE_SOURCE_HINTS)
+    is_likely_paywalled_source = any(h in source_norm for h in _PAYWALLED_SOURCE_HINTS)
+
     # Count sentences: real articles have multiple sentences
     sentence_count = len([s for s in re.split(r'[.!?]+', stripped) if len(s.strip()) > 15])
 
-    is_paywall = (
+    structural_paywall = (
         len(stripped) < 30  # essentially empty
         or norm_content == norm_title  # content is exactly the title
         or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
         or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
-        or has_paywall_word  # explicit paywall keyword
-        or len(stripped) < 150  # extremely short — always teaser
-        or (len(stripped) < 350 and sentence_count <= 2)  # short teaser with ≤2 sentences
-        or (len(stripped) < 500 and sentence_count <= 1)  # single teaser sentence
     )
+
+    teaser_paywall = (
+        len(stripped) < 150
+        or (len(stripped) < 350 and sentence_count <= 2)
+        or (len(stripped) < 500 and sentence_count <= 1)
+    )
+
+    # Source-aware thresholding to prevent global free-wire false positives.
+    if is_likely_free_source:
+        is_paywall = structural_paywall or has_paywall_word
+    elif is_likely_paywalled_source:
+        is_paywall = structural_paywall or has_paywall_word or teaser_paywall
+    else:
+        is_paywall = structural_paywall or has_paywall_word or (len(stripped) < 180 and sentence_count <= 1)
+
     if is_paywall:
         return {"bullets": [], "source": "no_content"}
 

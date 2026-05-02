@@ -169,7 +169,7 @@ def enrich_unprocessed_articles() -> int:
             finnish_title, summary = translate_and_summarize(row["title"], content)
         else:
             finnish_title = None
-            summary = summarize_article(row["title"], content)
+            summary = summarize_article(row["title"], content, row["source"])
 
         # Score using the (potentially translated) title for better Finnish keyword matching
         score_title = finnish_title or row["title"]
