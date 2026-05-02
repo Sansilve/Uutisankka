@@ -76,6 +76,45 @@ function todayFi() {
   })
 }
 
+
+const SOURCE_NAMES = {
+  'MT RSS feed': 'Maaseudun Tulevaisuus',
+  'Iltalehti.fi tuoreimmat uutiset - Uutiset': 'Iltalehti',
+  'Uutiset - Helsingin Sanomat': 'Helsingin Sanomat',
+  'Uutiset - Ilta-Sanomat': 'Ilta-Sanomat',
+  'Pääuutiset | Kauppalehti.fi': 'Kauppalehti',
+  'Latest News From Euronews | Euronews RSS': 'Euronews',
+  'Al Jazeera – Breaking News, World News and Video from Al Jazeera': 'Al Jazeera',
+  'Al Jazeera â€“ Breaking News, World News and Video from Al Jazeera': 'Al Jazeera',
+  'Yle Uutiset | Tuoreimmat': 'Yle Uutiset',
+  'Yle Uutiset | Pääuutiset': 'Yle Uutiset',
+  'Yle Urheilu | Tuoreimmat': 'Yle Urheilu',
+  'NYT > World News': 'New York Times',
+  'World news | The Guardian': 'The Guardian',
+  'World | Deutsche Welle': 'Deutsche Welle',
+  'NPR Topics: World': 'NPR',
+  'TalouselÃ¤mÃ¤': 'Talouselämä',
+  'PÃ¤Ã¤uutiset | Kauppalehti.fi': 'Kauppalehti',
+  'Yle Uutiset | PÃ¤Ã¤uutiset': 'Yle Uutiset',
+  ': World': 'Reuters',
+}
+
+function cleanSource(raw) {
+  return SOURCE_NAMES[raw] || raw
+}
+
+function formatPubDate(isoStr) {
+  if (!isoStr) return todayFi()
+  const d = new Date(isoStr)
+  const today = new Date()
+  const isToday = d.toDateString() === today.toDateString()
+  if (isToday) {
+    return 'Tänään klo ' + d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' }) +
+    ' klo ' + d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })
+}
+
 function bulletsToLead(bullets) {
   if (!bullets || bullets.length === 0) return ''
   return bullets.slice(0, 3).join(' ')
@@ -220,14 +259,14 @@ export default function ArticleCard({
                 </View>
               )}
             </View>
-            <Text style={styles.dateText}>{todayFi()}</Text>
+            <Text style={styles.dateText}>{formatPubDate(story.published_at)}</Text>
           </View>
 
           <Text style={[styles.title, isCompact && styles.titleCompact]}>{story.title}</Text>
 
           <View style={styles.titleRule} />
 
-          <Text style={styles.sourceText}>📰 {story.source}</Text>
+          <Text style={styles.sourceText}>📰 {cleanSource(story.source)}</Text>
 
           <Text style={[styles.lead, isCompact && styles.leadCompact]}>{lead}</Text>
 

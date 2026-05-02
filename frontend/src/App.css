@@ -176,6 +176,12 @@ button:disabled { cursor: not-allowed; opacity: 0.5; transform: none; box-shadow
   padding: 0.1rem 0.5rem;
   font-weight: 700;
 }
+.card-date {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
 .paywall-badge {
   font-size: 0.72rem;
   background: #fef3c7;

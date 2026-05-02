@@ -70,6 +70,46 @@ function topicLabel(t) {
   return found ? found.label : (t.charAt(0).toUpperCase() + t.slice(1))
 }
 
+// ── Source name cleanup ──────────────────────────────────────────────────────
+const SOURCE_NAMES = {
+  'MT RSS feed': 'Maaseudun Tulevaisuus',
+  'Iltalehti.fi tuoreimmat uutiset - Uutiset': 'Iltalehti',
+  'Uutiset - Helsingin Sanomat': 'Helsingin Sanomat',
+  'Uutiset - Ilta-Sanomat': 'Ilta-Sanomat',
+  'Pääuutiset | Kauppalehti.fi': 'Kauppalehti',
+  'Latest News From Euronews | Euronews RSS': 'Euronews',
+  'Al Jazeera – Breaking News, World News and Video from Al Jazeera': 'Al Jazeera',
+  'Al Jazeera â€“ Breaking News, World News and Video from Al Jazeera': 'Al Jazeera',
+  'Yle Uutiset | Tuoreimmat': 'Yle Uutiset',
+  'Yle Uutiset | Pääuutiset': 'Yle Uutiset',
+  'Yle Urheilu | Tuoreimmat': 'Yle Urheilu',
+  'NYT > World News': 'New York Times',
+  'World news | The Guardian': 'The Guardian',
+  'World | Deutsche Welle': 'Deutsche Welle',
+  'NPR Topics: World': 'NPR',
+  'Talouselämä': 'Talouselämä',
+  'TalouselÃ¤mÃ¤': 'Talouselämä',
+  'PÃ¤Ã¤uutiset | Kauppalehti.fi': 'Kauppalehti',
+  'Yle Uutiset | PÃ¤Ã¤uutiset': 'Yle Uutiset',
+  ': World': 'Reuters',
+}
+
+function cleanSource(raw) {
+  return SOURCE_NAMES[raw] || raw
+}
+
+function formatPubDate(isoStr) {
+  if (!isoStr) return null
+  const d = new Date(isoStr)
+  const today = new Date()
+  const isToday = d.toDateString() === today.toDateString()
+  if (isToday) {
+    return 'Tänään klo ' + d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' }) +
+    ' klo ' + d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })
+}
+
 function groupByDate(items) {
   const groups = {}
   for (const item of items) {
@@ -107,9 +147,10 @@ function StoryCard({ story, onRate, busy }) {
   return (
     <article className={`card${voted ? ' card--voted' : ''}`}>
       <div className="card-meta">
-        <span className="card-source">{story.source}</span>
+        <span className="card-source">{cleanSource(story.source)}</span>
         {story.score != null && <span className="card-score">{story.score.toFixed(1)} pts</span>}
         {story.is_paywall && <span className="paywall-badge">🔒 Maksumuuri</span>}
+        {story.published_at && <span className="card-date">{formatPubDate(story.published_at)}</span>}
       </div>
       <h2 className="card-title">
         <a href={story.url} target="_blank" rel="noreferrer">{story.title}</a>
