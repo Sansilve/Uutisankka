@@ -57,7 +57,7 @@ function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews })
   )
 }
 
-function CompletionScreen({ ratings, onRestart, onShowMore, onOpenSettings }) {
+function CompletionScreen({ ratings, onRestart, onShowMore, onOpenSettings, busy }) {
   const { width } = useWindowDimensions()
   const isCompact = width < 520
   const contentWidth = Math.min(width - (isCompact ? 32 : 64), 680)
@@ -110,10 +110,17 @@ function CompletionScreen({ ratings, onRestart, onShowMore, onOpenSettings }) {
 
         <View style={styles.completionRuleLight} />
 
-        <TouchableOpacity style={styles.primaryButton} onPress={onShowMore}>
-          <Text style={styles.primaryButtonText}>📰 Näytä lisää uutisia</Text>
+        <TouchableOpacity
+          style={[styles.primaryButton, busy && { opacity: 0.5 }]}
+          onPress={onShowMore}
+          disabled={busy}
+        >
+          {busy
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={styles.primaryButtonText}>📰 Näytä lisää uutisia</Text>
+          }
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={onRestart}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onRestart} disabled={busy}>
           <Text style={styles.secondaryButtonText}>↻ Aloita alusta</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ghostButton} onPress={onOpenSettings}>
@@ -149,10 +156,13 @@ export default function App() {
     loading,
     busy,
     statusMsg,
+    fatalError,
     setLoading,
     setBusy,
     setStatusMsg,
     setErrorStatus,
+    markFatalError,
+    clearFatalError,
     completeOnboarding,
   } = useSessionUiState()
 
@@ -165,8 +175,9 @@ export default function App() {
       ])
       applyBriefingData(briefingData, metricsData)
       applyPreferences(prefData)
+      clearFatalError()
     } catch (error) {
-      setErrorStatus(error)
+      markFatalError(error)
     }
   }
 
@@ -258,9 +269,31 @@ export default function App() {
         <OnboardingScreen
           onComplete={async () => {
             await completeOnboarding()
+            setLoading(true)
             await loadData()
+            setLoading(false)
           }}
         />
+      </SafeAreaView>
+    )
+  }
+
+  if (fatalError) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <Text style={styles.errorScreenTitle}>Yhteys epäonnistui</Text>
+        <Text style={styles.errorScreenBody}>{fatalError}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={async () => {
+            setLoading(true)
+            await loadData()
+            setLoading(false)
+          }}
+        >
+          <Text style={styles.retryButtonText}>↻ Yritä uudelleen</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     )
   }
@@ -329,6 +362,7 @@ export default function App() {
           onRestart={handleRestart}
           onShowMore={handleShowMore}
           onOpenSettings={openSettings}
+          busy={busy}
         />
       ) : activeStory ? (
         <ArticleCard
@@ -366,12 +400,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 32,
   },
   loadingText: {
     color: '#9ca3af',
     fontSize: 15,
     marginTop: 14,
     fontFamily: 'Georgia',
+  },
+  errorScreenTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Georgia',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorScreenBody: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 2,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
   // Masthead
