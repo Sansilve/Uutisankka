@@ -234,8 +234,9 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     elif is_likely_paywalled_source and not is_mixed_tabloid_source:
         is_paywall = teaser_paywall
     elif is_mixed_tabloid_source:
-        # IS/IL feeds often have very short but free leads.
-        is_paywall = len(stripped) < 120 and sentence_count <= 1
+        # IS/IL RSS feeds regularly give very short summaries (<30 chars) even for free articles.
+        # Only rely on hard structural evidence — no length-based heuristics.
+        is_paywall = False
     else:
         # For free/unknown sources, do not mark paywall from short teaser alone.
         is_paywall = False
