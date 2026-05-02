@@ -177,11 +177,23 @@ def summarize_article(title: str, content: str) -> dict[str, list[str]]:
         return re.sub(r"\s+", " ", s.lower().strip())
     norm_content = _norm(stripped)
     norm_title = _norm(title_stripped)
+    # Paywall keywords in Finnish/English that indicate subscriber-only content
+    _PAYWALL_WORDS = [
+        "tilaajille", "tilaa", "vain tilaajille", "maksullinen",
+        "subscribers only", "premium", "paywall",
+    ]
+    has_paywall_word = any(w in norm_content for w in _PAYWALL_WORDS)
+
+    # Count sentences: real articles have multiple sentences
+    sentence_count = len([s for s in re.split(r'[.!?]+', stripped) if len(s.strip()) > 15])
+
     is_paywall = (
         len(stripped) < 30  # essentially empty
         or norm_content == norm_title  # content is exactly the title
         or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
         or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
+        or has_paywall_word  # explicit paywall keyword
+        or (len(stripped) < 350 and sentence_count <= 1)  # single teaser sentence (lead-only)
     )
     if is_paywall:
         return {"bullets": [], "source": "no_content"}

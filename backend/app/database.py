@@ -231,8 +231,8 @@ def insert_article(article: dict[str, Any]) -> bool:
         try:
             cursor = conn.execute(
                 """
-                INSERT OR IGNORE INTO articles (title, source, published_at, content, url, content_hash, region)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO articles (title, source, published_at, content, url, content_hash, region, is_paywall)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     article["title"],
@@ -242,6 +242,7 @@ def insert_article(article: dict[str, Any]) -> bool:
                     article["url"],
                     article["content_hash"],
                     article.get("region", "suomi"),
+                    1 if article.get("is_paywall_hint") else 0,
                 ),
             )
             conn.commit()
