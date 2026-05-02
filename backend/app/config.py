@@ -75,6 +75,19 @@ FEED_REGIONS: dict[str, str] = {
     "https://feeds.washingtonpost.com/rss/world": "maailma",
     "https://www.aljazeera.com/xml/rss/all.xml": "maailma",
     "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best": "maailma",
+    "https://www.france24.com/en/rss": "maailma",
+    "https://feeds.skynews.com/feeds/rss/world.xml": "maailma",
+    "https://www.rfi.fr/en/international/rss": "maailma",
+    "https://rss.upi.com/news/tn_int.rss": "maailma",
+    "https://rss.dw.com/rdf/rss-en-world": "maailma",
+    "https://www.euronews.com/rss": "maailma",
+    "https://feeds.npr.org/1004/rss.xml": "maailma",
+    "http://rss.cnn.com/rss/edition_world.rss": "maailma",
+    "https://feeds.feedburner.com/time/world": "maailma",
+    "https://www.latimes.com/world-nation/rss2.0.xml": "maailma",
+    "https://www.independent.co.uk/news/world/rss": "maailma",
+    "https://www.ft.com/world?format=rss": "maailma",
+    "https://globalnews.ca/world/feed/": "maailma",
 }
 
 DEFAULT_FEEDS = list(FEED_REGIONS.keys())
