@@ -1,10 +1,11 @@
-"""Unit tests for classifier.py — LLM article category classifier."""
+"""Unit tests for classifier.py — LLM article category + tone classifier."""
 
 import json
 import pytest
 
 from app.services.classifier import (
     ALLOWED_CATEGORIES,
+    ALLOWED_TONES,
     ClassificationResult,
     _parse_response,
     classify_article,
@@ -12,14 +13,25 @@ from app.services.classifier import (
 
 
 # ---------------------------------------------------------------------------
-# _parse_response — JSON parsing
+# _parse_response — JSON parsing helpers
 # ---------------------------------------------------------------------------
 
-def _make_json(primary="technology", secondary=None, primary_conf=0.9, secondary_conf=0.0):
+def _make_json(
+    primary="technology",
+    secondary=None,
+    primary_conf=0.9,
+    secondary_conf=0.0,
+    tone="neutral",
+    tone_confidence=0.8,
+    tone_reason="Factual tech update with no emotional charge.",
+):
     data = {
         "primary": primary,
         "secondary": [secondary] if secondary else [],
         "confidence": {"primary": primary_conf, "secondary": secondary_conf},
+        "tone": tone,
+        "tone_confidence": tone_confidence,
+        "tone_reason": tone_reason,
     }
     return json.dumps(data)
 
@@ -163,3 +175,82 @@ def test_system_prompt_requests_json_output():
     assert "primary" in _SYSTEM_PROMPT
     assert "secondary" in _SYSTEM_PROMPT
     assert "confidence" in _SYSTEM_PROMPT
+    assert "tone" in _SYSTEM_PROMPT
+    assert "tone_confidence" in _SYSTEM_PROMPT
+    assert "tone_reason" in _SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Tone parsing tests
+# ---------------------------------------------------------------------------
+
+def test_parse_returns_tone_from_llm():
+    raw = _make_json("health", tone="negative", tone_confidence=0.85, tone_reason="Article is about disease outbreak.")
+    result = _parse_response(raw)
+    assert result is not None
+    assert result.tone == "negative"
+    assert result.tone_confidence == 0.85
+    assert result.tone_reason == "Article is about disease outbreak."
+
+
+def test_parse_tone_below_threshold_falls_back_to_neutral():
+    """tone_confidence < 0.6 → stabilised to 'neutral'."""
+    raw = _make_json("sports", tone="positive", tone_confidence=0.4)
+    result = _parse_response(raw)
+    assert result is not None
+    assert result.tone == "neutral"
+    assert result.tone_confidence == 0.0
+    assert result.tone_reason is None
+
+
+def test_parse_invalid_tone_falls_back_to_neutral():
+    data = {
+        "primary": "technology",
+        "secondary": [],
+        "confidence": {"primary": 0.9, "secondary": 0.0},
+        "tone": "angry",  # not in ALLOWED_TONES
+        "tone_confidence": 0.9,
+        "tone_reason": "Some reason.",
+    }
+    result = _parse_response(json.dumps(data))
+    assert result is not None
+    assert result.tone == "neutral"
+
+
+def test_parse_all_tone_values_accepted():
+    for tone_val in ["positive", "neutral", "negative", "mixed"]:
+        raw = _make_json("politics", tone=tone_val, tone_confidence=0.8)
+        result = _parse_response(raw)
+        assert result is not None, f"Expected result for tone={tone_val}"
+        assert result.tone == tone_val
+
+
+def test_parse_missing_tone_defaults_to_neutral():
+    """Response without tone field should not crash — defaults to neutral."""
+    data = {
+        "primary": "business",
+        "secondary": [],
+        "confidence": {"primary": 0.85, "secondary": 0.0},
+        # no "tone" key at all
+    }
+    result = _parse_response(json.dumps(data))
+    assert result is not None
+    assert result.tone == "neutral"
+
+
+# ---------------------------------------------------------------------------
+# ALLOWED_TONES completeness
+# ---------------------------------------------------------------------------
+
+def test_allowed_tones_are_expected():
+    assert ALLOWED_TONES == {"positive", "neutral", "negative", "mixed"}
+
+
+# ---------------------------------------------------------------------------
+# System prompt tone rules
+# ---------------------------------------------------------------------------
+
+def test_system_prompt_contains_all_tone_values():
+    from app.services.classifier import _SYSTEM_PROMPT
+    for tone in ALLOWED_TONES:
+        assert f'"{tone}"' in _SYSTEM_PROMPT, f"Tone '{tone}' not in system prompt"

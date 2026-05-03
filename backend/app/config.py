@@ -203,7 +203,7 @@ _LANG_NAMES: dict[str, str] = {
 TRANSLATION_TARGET_LANG_NAME: str = _LANG_NAMES.get(TRANSLATION_TARGET_LANG, TRANSLATION_TARGET_LANG)
 
 # ---------------------------------------------------------------------------
-# Article category classifier (LLM-based)
+# Article category + tone classifier (LLM-based)
 # ---------------------------------------------------------------------------
 # Minimum confidence required to keep the primary category.  Below this the
 # article is stored as uncategorised (category=NULL).
@@ -215,6 +215,12 @@ CLASSIFIER_PRIMARY_MIN_CONFIDENCE: float = float(
 # secondary is dropped but the primary is kept if it passed its own threshold.
 CLASSIFIER_SECONDARY_MIN_CONFIDENCE: float = float(
     os.getenv("CLASSIFIER_SECONDARY_MIN_CONFIDENCE", "0.5")
+)
+
+# Minimum tone_confidence required to use the LLM-assigned tone.
+# Below this the tone is stabilised to "neutral".
+CLASSIFIER_TONE_MIN_CONFIDENCE: float = float(
+    os.getenv("CLASSIFIER_TONE_MIN_CONFIDENCE", "0.6")
 )
 
 # Adaptive scoring feature flag.

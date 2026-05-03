@@ -86,6 +86,9 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "is_paywall", "INTEGER NOT NULL DEFAULT 0")
             _ensure_column(conn, "articles", "category", "TEXT DEFAULT NULL")
             _ensure_column(conn, "articles", "category_secondary", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "tone", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "tone_confidence", "REAL DEFAULT NULL")
+            _ensure_column(conn, "articles", "tone_reason", "TEXT DEFAULT NULL")
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 1")
@@ -489,6 +492,9 @@ def update_article_enrichment(
     translated_title: str | None = None,
     category: str | None = None,
     category_secondary: str | None = None,
+    tone: str | None = None,
+    tone_confidence: float | None = None,
+    tone_reason: str | None = None,
 ) -> None:
     is_paywall_from_summary = 1 if summary.get("source") == "no_content" else 0
     with _db_lock:
@@ -503,7 +509,8 @@ def update_article_enrichment(
                     UPDATE articles
                     SET title = ?, base_score = ?, score = ?, topics = ?,
                         summary_json = ?, score_breakdown_json = ?, is_paywall = ?,
-                        category = ?, category_secondary = ?
+                        category = ?, category_secondary = ?,
+                        tone = ?, tone_confidence = ?, tone_reason = ?
                     WHERE id = ?
                     """,
                     (
@@ -516,6 +523,9 @@ def update_article_enrichment(
                         is_paywall,
                         category,
                         category_secondary,
+                        tone,
+                        tone_confidence,
+                        tone_reason,
                         article_id,
                     ),
                 )
@@ -525,7 +535,8 @@ def update_article_enrichment(
                     UPDATE articles
                     SET base_score = ?, score = ?, topics = ?, summary_json = ?,
                         score_breakdown_json = ?, is_paywall = ?,
-                        category = ?, category_secondary = ?
+                        category = ?, category_secondary = ?,
+                        tone = ?, tone_confidence = ?, tone_reason = ?
                     WHERE id = ?
                     """,
                     (
@@ -537,6 +548,9 @@ def update_article_enrichment(
                         is_paywall,
                         category,
                         category_secondary,
+                        tone,
+                        tone_confidence,
+                        tone_reason,
                         article_id,
                     ),
                 )

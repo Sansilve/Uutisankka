@@ -267,6 +267,9 @@ def enrich_unprocessed_articles() -> int:
             translated_title=finnish_title,
             category=classification.primary if classification else None,
             category_secondary=classification.secondary if classification else None,
+            tone=classification.tone if classification else None,
+            tone_confidence=classification.tone_confidence if classification else None,
+            tone_reason=classification.tone_reason if classification else None,
         )
         count += 1
 

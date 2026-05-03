@@ -53,6 +53,9 @@ class ArticleBrief(BaseModel):
     is_paywall: bool = False
     category: str | None = None
     category_secondary: str | None = None
+    tone: str | None = None
+    tone_confidence: float | None = None
+    tone_reason: str | None = None
 
 
 class IngestResponse(BaseModel):
