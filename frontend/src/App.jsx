@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   fetchArticles,
+  fetchArticleStats,
   fetchBriefing,
   fetchHistory,
   fetchMetrics,
@@ -291,22 +292,50 @@ function HistoryView() {
 }
 
 function AllArticlesView() {
+  const PAGE_SIZE = 50
+
   const [articles, setArticles] = useState([])
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [stats, setStats] = useState(null)
   const [topicFilter, setTopicFilter] = useState('all')
   const [regionFilter, setRegionFilter] = useState('all')
 
   useEffect(() => {
-    fetchArticles(100, true)
-      .then(data => { setArticles(data.items || []); setLoading(false) })
+    // Fetch real totals independently of pagination
+    fetchArticleStats().then(setStats).catch(() => {})
+    // First page
+    fetchArticles(PAGE_SIZE, true, 0)
+      .then(data => {
+        const items = data.items || []
+        setArticles(items)
+        setHasMore(items.length === PAGE_SIZE)
+        setOffset(PAGE_SIZE)
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [])
+
+  function loadMore() {
+    setLoadingMore(true)
+    fetchArticles(PAGE_SIZE, true, offset)
+      .then(data => {
+        const items = data.items || []
+        setArticles(prev => [...prev, ...items])
+        setHasMore(items.length === PAGE_SIZE)
+        setOffset(prev => prev + PAGE_SIZE)
+        setLoadingMore(false)
+      })
+      .catch(() => setLoadingMore(false))
+  }
 
   const filtered = articles
     .filter(a => topicFilter === 'all' || (a.topics || []).includes(topicFilter))
     .filter(a => regionFilter === 'all' || a.region === regionFilter)
 
-  // Stats
+  // Topic distribution from loaded articles only (for filter chips)
   const topicCounts = {}
   for (const a of articles) {
     for (const t of (a.topics || [])) {
@@ -314,9 +343,6 @@ function AllArticlesView() {
     }
   }
   const topTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
-  const paywallCount = articles.filter(a => a.is_paywall).length
-  const regions = { suomi: 0, maailma: 0 }
-  for (const a of articles) { if (regions[a.region] !== undefined) regions[a.region]++ }
 
   if (loading) return <p className="empty">Ladataan artikkeleita...</p>
 
@@ -324,19 +350,19 @@ function AllArticlesView() {
     <div>
       <div className="data-stats">
         <div className="stat-card">
-          <div className="stat-num">{articles.length}</div>
+          <div className="stat-num">{stats ? stats.total : articles.length}</div>
           <div className="stat-label">Artikkelia</div>
         </div>
         <div className="stat-card">
-          <div className="stat-num">{regions.suomi}</div>
+          <div className="stat-num">{stats ? stats.suomi : '–'}</div>
           <div className="stat-label">🇫🇮 Suomi</div>
         </div>
         <div className="stat-card">
-          <div className="stat-num">{regions.maailma}</div>
+          <div className="stat-num">{stats ? stats.maailma : '–'}</div>
           <div className="stat-label">🌍 Maailma</div>
         </div>
         <div className="stat-card">
-          <div className="stat-num">{paywallCount}</div>
+          <div className="stat-num">{stats ? stats.paywall : '–'}</div>
           <div className="stat-label">🔒 Maksumuuri</div>
         </div>
       </div>
@@ -373,6 +399,18 @@ function AllArticlesView() {
           <StoryCard key={a.id} story={a} onRate={null} busy={false} />
         ))}
       </div>
+
+      {hasMore && (
+        <div style={{ textAlign: 'center', padding: '1.2rem 0' }}>
+          <button
+            className="btn-load-more"
+            onClick={loadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? 'Ladataan...' : `Lataa lisää (näytetään ${articles.length}${stats ? ` / ${stats.total}` : ''})`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

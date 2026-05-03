@@ -62,6 +62,9 @@ export function fetchReenrichStatus() {
 export function fetchHistory(limit = 200) {
   return request(`/api/history?limit=${limit}`)
 }
-export function fetchArticles(limit = 50, includePaywall = true) {
-  return request(`/api/articles?limit=${limit}&include_paywall=${includePaywall}`)
+export function fetchArticles(limit = 50, includePaywall = true, offset = 0) {
+  return request(`/api/articles?limit=${limit}&offset=${offset}&include_paywall=${includePaywall}`)
+}
+export function fetchArticleStats() {
+  return request('/api/articles/stats')
 }

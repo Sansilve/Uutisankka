@@ -761,6 +761,7 @@ def get_swipe_history(limit: int = 100) -> list[sqlite3.Row]:
 
 def list_articles(
     limit: int = 300,
+    offset: int = 0,
     region_filters: list[str] | None = None,
     hide_paywall: bool = False,
     excluded_sources: list[str] | None = None,
@@ -784,7 +785,7 @@ def list_articles(
             where_sources = f"AND a.source NOT IN ({sp})"
             params.extend(excluded_sources)
 
-        params.append(limit)
+        params.extend([limit, offset])
 
         return conn.execute(
             f"""
@@ -804,10 +805,59 @@ def list_articles(
               {where_paywall}
               {where_sources}
             ORDER BY datetime(a.published_at) DESC, a.id DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
             params,
         ).fetchall()
+    finally:
+        conn.close()
+
+
+def count_articles(
+    region_filters: list[str] | None = None,
+    hide_paywall: bool = False,
+    excluded_sources: list[str] | None = None,
+) -> dict[str, int]:
+    """Return aggregate counts for the articles stat panel."""
+    conn = _conn()
+    try:
+        params: list = []
+
+        where_region = ""
+        if region_filters:
+            placeholders = ",".join("?" * len(region_filters))
+            where_region = f"AND a.region IN ({placeholders})"
+            params.extend(region_filters)
+
+        where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+
+        where_sources = ""
+        if excluded_sources:
+            sp = ",".join("?" * len(excluded_sources))
+            where_sources = f"AND a.source NOT IN ({sp})"
+            params.extend(excluded_sources)
+
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN a.region = 'suomi'   THEN 1 ELSE 0 END) AS suomi,
+                SUM(CASE WHEN a.region = 'maailma' THEN 1 ELSE 0 END) AS maailma,
+                SUM(CASE WHEN a.is_paywall = 1     THEN 1 ELSE 0 END) AS paywall
+            FROM articles a
+            WHERE 1=1
+              {where_region}
+              {where_paywall}
+              {where_sources}
+            """,
+            params,
+        ).fetchone()
+        return {
+            "total": row["total"] or 0,
+            "suomi": row["suomi"] or 0,
+            "maailma": row["maailma"] or 0,
+            "paywall": row["paywall"] or 0,
+        }
     finally:
         conn.close()
 

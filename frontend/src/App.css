@@ -339,6 +339,20 @@ button:disabled { cursor: not-allowed; opacity: 0.5; transform: none; box-shadow
 .count-pos { color: #065f46; font-weight: 700; }
 .count-neg { color: #b91c1c; font-weight: 700; }
 
+.btn-load-more {
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.55rem 1.4rem;
+  font-size: 0.88rem;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+}
+.btn-load-more:hover { background: var(--accent-soft); border-color: var(--accent); }
+.btn-load-more:disabled { opacity: 0.5; cursor: default; }
+
 /* ── Preferences panel ───────────────────────────────────────────────────── */
 .panel {
   background: var(--paper);
