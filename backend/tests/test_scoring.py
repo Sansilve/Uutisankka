@@ -131,7 +131,8 @@ def test_user_interest_topic_boost():
         published_at=_ts(2)
     )
     assert score_with > score_without
-    assert any("Interest topic boost" in str(b["reason"]) for b in breakdown)
+    # Interest topic boost is now 5.0 points (increased from 2.0)
+    assert any("Interest topic boost" in str(b["reason"]) and b.get("points") == 5.0 for b in breakdown)
 
 
 # ── User dislike penalty ──────────────────────────────────────────────────────

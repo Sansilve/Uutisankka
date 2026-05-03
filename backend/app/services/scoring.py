@@ -218,11 +218,11 @@ def score_article(
 
     for interest in interests:
         if interest in topics:
-            score += 2.0
-            breakdown.append({"reason": f"Interest topic boost: {interest}", "points": 2.0, "category": "preference"})
+            score += 5.0
+            breakdown.append({"reason": f"Interest topic boost: {interest}", "points": 5.0, "category": "preference"})
         elif interest in combined:
-            score += 0.8
-            breakdown.append({"reason": f"Interest text boost: {interest}", "points": 0.8, "category": "preference"})
+            score += 2.0
+            breakdown.append({"reason": f"Interest text boost: {interest}", "points": 2.0, "category": "preference"})
 
     for dislike in dislikes:
         if dislike in topics:
