@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 
 export default function useBriefingState(dailyLimit) {
   const [briefing, setBriefing] = useState([])
+  const [emptyReason, setEmptyReason] = useState(null)
   const [metrics, setMetrics] = useState(null)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [ratings, setRatings] = useState([])
@@ -9,10 +10,12 @@ export default function useBriefingState(dailyLimit) {
 
   function applyBriefingData(briefingData, metricsData) {
     setBriefing(briefingData?.stories || [])
+    setEmptyReason(briefingData?.empty_reason || null)
     setMetrics(metricsData || null)
     setCurrentIndex(0)
     setRatings([])
     setSurpriseStory(null)
+    setEmptyReason(null)
   }
 
   function addRating(storyId, isRelevant, isSurprise) {
@@ -52,6 +55,7 @@ export default function useBriefingState(dailyLimit) {
 
   return {
     briefing,
+    emptyReason,
     metrics,
     currentIndex,
     ratings,

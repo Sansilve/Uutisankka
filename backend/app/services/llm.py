@@ -276,6 +276,7 @@ def _ensure_metrics(provider: str) -> dict[str, int | float | list[float]]:
             "successes": 0,
             "failures": 0,
             "rate_limit_count": 0,
+            "validation_rejections": 0,
             "latencies_ms": [],
         }
         _llm_metrics[provider] = bucket
@@ -295,6 +296,7 @@ def _record_metric(
     success: bool,
     elapsed_ms: float,
     rate_limited: bool = False,
+    validation_rejected: bool = False,
 ) -> None:
     with _metrics_lock:
         bucket = _ensure_metrics(provider)
@@ -305,6 +307,8 @@ def _record_metric(
             bucket["failures"] += 1
         if rate_limited:
             bucket["rate_limit_count"] += 1
+        if validation_rejected:
+            bucket["validation_rejections"] += 1
         latencies = bucket["latencies_ms"]
         if isinstance(latencies, list):
             latencies.append(elapsed_ms)
@@ -332,6 +336,7 @@ def get_llm_stats() -> dict[str, dict[str, int | float]]:
                 "successes": int(bucket["successes"]),
                 "failures": int(bucket["failures"]),
                 "rate_limit_count": int(bucket["rate_limit_count"]),
+                "validation_rejections": int(bucket["validation_rejections"]),
                 "p50_ms": round(_percentile(latency_values, 0.50), 2),
                 "p95_ms": round(_percentile(latency_values, 0.95), 2),
             }
@@ -539,6 +544,7 @@ def chat_with_fallback(
                             provider=provider_name,
                             success=False,
                             elapsed_ms=(time.monotonic() - started) * 1000.0,
+                            validation_rejected=True,
                         )
                         continue
 

@@ -148,6 +148,7 @@ export default function App() {
     activeStory,
     isShowingSurprise,
     total,
+    emptyReason,
     progressCount,
     progressWidth,
     isComplete,
@@ -254,6 +255,37 @@ export default function App() {
     resetReadingSession()
     openFeed()
   }
+
+  const emptyStateMeta = (() => {
+    if (emptyReason === 'no_data') {
+      return {
+        title: 'Ei uutisia saatavilla',
+        body: 'Taustajärjestelmässä ei ole vielä uutisdataa. Yritä hetken kuluttua uudelleen.',
+      }
+    }
+    if (emptyReason === 'no_scope_match') {
+      return {
+        title: 'Ei uutisia valitulla alueella',
+        body: 'Nykyisillä aluevalinnoilla ei löytynyt uutisia. Muokkaa asetuksia tai kokeile toista aluetta.',
+      }
+    }
+    if (emptyReason === 'only_paywalled') {
+      return {
+        title: 'Vain maksumuuriuutisia löytyi',
+        body: 'Avoimia uutisia ei löytynyt valituilla suodattimilla. Kokeile sallia maksumuuriuutiset asetuksissa.',
+      }
+    }
+    if (emptyReason === 'no_filter_match') {
+      return {
+        title: 'Ei uutisia nykyisillä suodattimilla',
+        body: 'Kokeile löysentää suodattimia tai muuttaa asetuksia.',
+      }
+    }
+    return {
+      title: 'Ei uutisia saatavilla',
+      body: 'Mitään uutisia ei vastaa nykyisiä suodattimia. Kokeile muuttaa asetuksia tai palaa myöhemmin.',
+    }
+  })()
 
   if (loading || onboardingDone === null) {
     return (
@@ -407,12 +439,27 @@ export default function App() {
           ) : total === 0 ? (
             <>
               <Text style={styles.emptyEmoji}>🚫</Text>
-              <Text style={styles.emptyTitle}>Ei uutisia saatavilla</Text>
+              <Text style={styles.emptyTitle}>{emptyStateMeta.title}</Text>
               <Text style={styles.emptyBody}>
-                Mitään uutisia ei vastaa nykyisiä suodattimia. Kokeile muuttaa asetuksia tai palaa myöhemmin.
+                {emptyStateMeta.body}
               </Text>
-              <TouchableOpacity style={styles.primaryButton} onPress={openSettings}>
-                <Text style={styles.primaryButtonText}>Muokkaa asetuksia</Text>
+              <TouchableOpacity
+                style={[styles.primaryButton, busy && { opacity: 0.5 }]}
+                onPress={async () => {
+                  setBusy(true)
+                  await loadData()
+                  setBusy(false)
+                }}
+                disabled={busy}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>↻ Yritä uudelleen</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={openSettings} disabled={busy}>
+                <Text style={styles.secondaryButtonText}>Muokkaa asetuksia</Text>
               </TouchableOpacity>
             </>
           ) : isComplete ? (

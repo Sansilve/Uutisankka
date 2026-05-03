@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class PreferenceProfile(BaseModel):
     interests: List[str] = Field(default_factory=lambda: ["politiikka", "teknologia", "talous"])
-    disliked_topics: List[str] = Field(default_factory=lambda: ["viihde", "celebrity"])
+    disliked_topics: List[str] = Field(default_factory=list)
     news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
     local_city: str = ""
     hide_paywall: bool = False
@@ -71,6 +71,7 @@ class BriefingResponse(BaseModel):
     generated_at: datetime
     total: int
     stories: List[ArticleBrief]
+    empty_reason: str | None = None
 
 
 class FeedbackPayload(BaseModel):

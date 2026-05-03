@@ -245,7 +245,7 @@ ADAPTIVE_SCORING_ENABLED: bool = os.getenv("ADAPTIVE_SCORING_ENABLED", "true").l
 # Scoring logic version gate.
 # v1 = heuristic baseline (no adaptive topic weighting)
 # v2 = baseline + adaptive topic weighting from swipe history
-SCORING_VERSION: str = os.getenv("SCORING_VERSION", "v1").strip().lower()
+SCORING_VERSION: str = os.getenv("SCORING_VERSION", "v2").strip().lower()
 if SCORING_VERSION not in {"v1", "v2"}:
     SCORING_VERSION = "v1"
 
@@ -326,6 +326,9 @@ OBSERVABILITY_PAYWALL_FP_THRESHOLD: float = float(
 )
 OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD: float = float(
     os.getenv("OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD", "0.50")
+)
+OBSERVABILITY_LLM_REJECTION_THRESHOLD: float = float(
+    os.getenv("OBSERVABILITY_LLM_REJECTION_THRESHOLD", "0.20")
 )
 
 # Dwell time thresholds for swipe signal strength weighting.

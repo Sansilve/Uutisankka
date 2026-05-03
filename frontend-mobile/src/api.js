@@ -34,8 +34,15 @@ async function request(path, options = {}) {
     ...options,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed: ${response.status}`)
+    let message = ''
+    try {
+      const payload = await response.json()
+      message = payload?.detail || payload?.message || ''
+    } catch {
+      const text = await response.text()
+      message = text || ''
+    }
+    throw new Error(message || `Request failed: ${response.status}`)
   }
   return response.json()
 }

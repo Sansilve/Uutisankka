@@ -225,6 +225,7 @@ def test_get_admin_llm_stats_schema(client):
         assert "successes" in stats
         assert "failures" in stats
         assert "rate_limit_count" in stats
+        assert "validation_rejections" in stats
         assert "p50_ms" in stats
         assert "p95_ms" in stats
 
@@ -249,7 +250,11 @@ def test_get_admin_ingest_stats_schema(client):
     assert "paywall_detected" in body
     assert "scrape_attempted" in body
     assert "scrape_succeeded" in body
+    assert "alerts" in body
+    assert isinstance(body["alerts"], list)
 
     for key, value in body.items():
+        if key == "alerts":
+            continue
         assert isinstance(key, str)
         assert isinstance(value, int)
