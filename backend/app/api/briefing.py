@@ -72,7 +72,6 @@ def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingRespons
     rows = top_briefing(
         limit,
         region_filters=_scope_to_regions(prefs),
-        disliked_topics=prefs.get("disliked_topics") or None,
         hide_paywall=prefs.get("hide_paywall", True),
         excluded_sources=prefs.get("excluded_sources") or None,
     )
@@ -86,7 +85,6 @@ def get_random_briefing(limit: int = Query(default=10, ge=1, le=50)) -> Briefing
     rows = random_briefing(
         limit,
         region_filters=_scope_to_regions(prefs),
-        disliked_topics=prefs.get("disliked_topics") or None,
         hide_paywall=prefs.get("hide_paywall", True),
         excluded_sources=prefs.get("excluded_sources") or None,
     )

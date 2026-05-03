@@ -6,8 +6,15 @@ from email.utils import parsedate_to_datetime
 from dateutil import parser
 
 from ..config import (
-    ADAPTIVE_MIN_SWIPES,
     ADAPTIVE_SCORING_ENABLED,
+    AFFINITY_CATEGORY_WEIGHT,
+    AFFINITY_EXPLICIT_TOPIC_PRIOR,
+    AFFINITY_MIN_SAMPLES,
+    AFFINITY_PRIOR_ALPHA,
+    AFFINITY_PRIOR_BETA,
+    AFFINITY_SIGNAL_MAX_ABS,
+    AFFINITY_SOURCE_WEIGHT,
+    AFFINITY_TOPIC_WEIGHT,
     BREAKING_HINTS,
     CLICKBAIT_PATTERNS,
     LOW_SIGNAL_PATTERNS,
@@ -151,13 +158,30 @@ def _adaptive_enabled() -> bool:
     return SCORING_VERSION == "v2" and ADAPTIVE_SCORING_ENABLED
 
 
+def _affinity_points(
+    positive: float,
+    total: float,
+    weight: float,
+) -> float:
+    if total < AFFINITY_MIN_SAMPLES or weight == 0.0:
+        return 0.0
+    p = (AFFINITY_PRIOR_ALPHA + positive) / (AFFINITY_PRIOR_ALPHA + AFFINITY_PRIOR_BETA + total)
+    signal = 2.0 * (p - 0.5)  # [-1, 1]
+    points = weight * signal
+    return round(max(-AFFINITY_SIGNAL_MAX_ABS, min(AFFINITY_SIGNAL_MAX_ABS, points)), 2)
+
+
 def score_article(
     title: str,
     content: str,
     source: str,
     published_at: str | None,
     preferences: dict[str, list[str]],
-    topic_swipe_stats: dict[str, dict[str, int]] | None = None,
+    topic_swipe_stats: dict[str, dict[str, float]] | None = None,
+    source_swipe_stats: dict[str, dict[str, float]] | None = None,
+    category_swipe_stats: dict[str, dict[str, float]] | None = None,
+    category: str | None = None,
+    category_secondary: str | None = None,
 ) -> tuple[float, list[str], list[dict[str, float | str]]]:
     combined = f"{title} {content}".lower()
     topics = detect_topics(combined)
@@ -174,26 +198,6 @@ def score_article(
         if points != 0:
             score += points
             breakdown.append({"reason": f"Topic match: {topic}", "points": points, "category": "topical"})
-
-    # Adaptive topic weight adjustment from swipe history (S4).
-    # Applied only when the feature flag is on and stats are supplied.
-    if _adaptive_enabled() and topic_swipe_stats:
-        for topic in topics:
-            stats = topic_swipe_stats.get(topic)
-            if not stats or stats["total"] < ADAPTIVE_MIN_SWIPES:
-                continue
-            positivity = stats["positive"] / stats["total"]  # 0.0 – 1.0
-            # delta ∈ [-0.3, +0.3]; 0.5 positivity → 0 delta
-            delta = max(-0.3, min(0.3, (positivity - 0.5) * 0.6))
-            base = TOPIC_WEIGHTS.get(topic, 0.0)
-            adjustment = round(base * delta, 2)
-            if adjustment != 0.0:
-                score += adjustment
-                breakdown.append({
-                    "reason": f"Adaptive weight: {topic} ({stats['positive']}/{stats['total']} positive)",
-                    "points": adjustment,
-                    "category": "preference",
-                })
 
     for pattern in CLICKBAIT_PATTERNS:
         if re.search(pattern, combined):
@@ -213,24 +217,77 @@ def score_article(
         score += 1.2
         breakdown.append({"reason": "Breaking news hint", "points": 1.2, "category": "quality"})
 
+    # Unified affinity model: explicit like/dislike choices are injected as
+    # pseudo-observations into the same topic signal as swipe-learned affinity.
+    topic_stats: dict[str, dict[str, float]] = {}
+    if _adaptive_enabled() and topic_swipe_stats:
+        topic_stats = {
+            k.lower(): {
+                "positive": float(v.get("positive", 0.0)),
+                "total": float(v.get("total", 0.0)),
+            }
+            for k, v in topic_swipe_stats.items()
+        }
+
     interests = {item.lower() for item in preferences.get("interests", [])}
     dislikes = {item.lower() for item in preferences.get("disliked_topics", [])}
 
     for interest in interests:
-        if interest in topics:
-            score += 5.0
-            breakdown.append({"reason": f"Interest topic boost: {interest}", "points": 5.0, "category": "preference"})
-        elif interest in combined:
-            score += 2.0
-            breakdown.append({"reason": f"Interest text boost: {interest}", "points": 2.0, "category": "preference"})
+        if interest not in topic_stats:
+            topic_stats[interest] = {"positive": 0.0, "total": 0.0}
+        topic_stats[interest]["positive"] += AFFINITY_EXPLICIT_TOPIC_PRIOR
+        topic_stats[interest]["total"] += AFFINITY_EXPLICIT_TOPIC_PRIOR
 
     for dislike in dislikes:
-        if dislike in topics:
-            score -= 3.0
-            breakdown.append({"reason": f"Disliked topic penalty: {dislike}", "points": -3.0, "category": "preference"})
-        elif dislike in combined:
-            score -= 1.0
-            breakdown.append({"reason": f"Disliked text penalty: {dislike}", "points": -1.0, "category": "preference"})
+        if dislike not in topic_stats:
+            topic_stats[dislike] = {"positive": 0.0, "total": 0.0}
+        topic_stats[dislike]["total"] += AFFINITY_EXPLICIT_TOPIC_PRIOR
+
+    for topic in topics:
+        stats = topic_stats.get(topic.lower())
+        if not stats:
+            continue
+        points = _affinity_points(stats["positive"], stats["total"], AFFINITY_TOPIC_WEIGHT)
+        if points != 0.0:
+            score += points
+            breakdown.append({
+                "reason": f"Topic affinity: {topic}",
+                "points": points,
+                "category": "preference",
+            })
+
+    if _adaptive_enabled() and source_swipe_stats:
+        source_key = source.strip().lower()
+        sstats = source_swipe_stats.get(source_key)
+        if sstats:
+            points = _affinity_points(sstats["positive"], sstats["total"], AFFINITY_SOURCE_WEIGHT)
+            if points != 0.0:
+                score += points
+                breakdown.append({
+                    "reason": f"Source affinity: {source}",
+                    "points": points,
+                    "category": "source",
+                })
+
+    if _adaptive_enabled() and category_swipe_stats:
+        category_keys = {
+            (category or "").strip().lower(),
+            (category_secondary or "").strip().lower(),
+        }
+        for key in category_keys:
+            if not key:
+                continue
+            cstats = category_swipe_stats.get(key)
+            if not cstats:
+                continue
+            points = _affinity_points(cstats["positive"], cstats["total"], AFFINITY_CATEGORY_WEIGHT)
+            if points != 0.0:
+                score += points
+                breakdown.append({
+                    "reason": f"Category affinity: {key}",
+                    "points": points,
+                    "category": "preference",
+                })
 
     recency_points = _recency_boost(published_at)
     score += recency_points

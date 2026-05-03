@@ -12,7 +12,7 @@ from urllib.request import urlopen
 
 import feedparser
 
-from ..config import ADAPTIVE_SCORING_ENABLED, DEFAULT_FEEDS, FEED_REGIONS, LOW_TIER_MIN_CONTENT_LENGTH, MIN_CONTENT_LENGTH, SOURCE_QUALITY_TIERS, TRANSLATION_SCORE_THRESHOLD
+from ..config import ADAPTIVE_SCORING_ENABLED, AFFINITY_HALF_LIFE_DAYS, DEFAULT_FEEDS, FEED_REGIONS, LOW_TIER_MIN_CONTENT_LENGTH, MIN_CONTENT_LENGTH, SOURCE_QUALITY_TIERS, TRANSLATION_SCORE_THRESHOLD
 from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
@@ -21,6 +21,7 @@ from ..database import (
     fetch_unenriched,
     fetch_unscored,
     fetch_untranslated_english,
+    get_affinity_swipe_stats,
     get_article_feedback_score,
     get_preferences,
     get_topic_swipe_stats,
@@ -86,6 +87,13 @@ def _clean(value: str | None) -> str:
     value = html.unescape(value)
     value = TAG_RE.sub(" ", value)
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _row_value(row: Any, key: str, default: Any = None) -> Any:
+    try:
+        return row[key]
+    except Exception:
+        return default
 
 
 def _to_iso(entry: Any) -> str | None:
@@ -203,7 +211,13 @@ def enrich_unprocessed_articles() -> int:
     """Generate summaries for new articles, then score anything unscored."""
     stats = _reset_ingest_stats()
     preferences = get_preferences()
-    topic_swipe_stats = get_topic_swipe_stats() if ADAPTIVE_SCORING_ENABLED else None
+    topic_swipe_stats = None
+    source_swipe_stats = None
+    category_swipe_stats = None
+    if ADAPTIVE_SCORING_ENABLED:
+        topic_swipe_stats, source_swipe_stats, category_swipe_stats = get_affinity_swipe_stats(
+            half_life_days=AFFINITY_HALF_LIFE_DAYS
+        )
     count = 0
     filtered_below_threshold = 0
     filtered_source_quality = 0
@@ -228,6 +242,10 @@ def enrich_unprocessed_articles() -> int:
                     title=row["title"], content=content, source=source,
                     published_at=row["published_at"], preferences=preferences,
                     topic_swipe_stats=topic_swipe_stats,
+                    source_swipe_stats=source_swipe_stats,
+                    category_swipe_stats=category_swipe_stats,
+                    category=_row_value(row, "category"),
+                    category_secondary=_row_value(row, "category_secondary"),
                 )
                 feedback_score = get_article_feedback_score(row["id"])
                 total_score = round(pre_base_score + feedback_score, 2)
@@ -248,6 +266,10 @@ def enrich_unprocessed_articles() -> int:
             published_at=row["published_at"],
             preferences=preferences,
             topic_swipe_stats=topic_swipe_stats,
+            source_swipe_stats=source_swipe_stats,
+            category_swipe_stats=category_swipe_stats,
+            category=_row_value(row, "category"),
+            category_secondary=_row_value(row, "category_secondary"),
         )
 
         below_threshold = pre_base_score < TRANSLATION_SCORE_THRESHOLD
@@ -279,6 +301,10 @@ def enrich_unprocessed_articles() -> int:
                 published_at=row["published_at"],
                 preferences=preferences,
                 topic_swipe_stats=topic_swipe_stats,
+                source_swipe_stats=source_swipe_stats,
+                category_swipe_stats=category_swipe_stats,
+                category=_row_value(row, "category"),
+                category_secondary=_row_value(row, "category_secondary"),
             )
 
         summary_src = _summary_source(summary)
@@ -290,7 +316,6 @@ def enrich_unprocessed_articles() -> int:
             stats["paywall_detected"] += 1
 
         feedback_score = get_article_feedback_score(row["id"])
-        total_score = round(base_score + feedback_score, 2)
 
         # LLM category classification — runs only when LLM is routed (score above threshold)
         classification = classify_article(
@@ -299,6 +324,22 @@ def enrich_unprocessed_articles() -> int:
             source=source,
             url=url,
         ) if not below_threshold else None
+
+        if classification:
+            base_score, topics, breakdown_items = score_article(
+                title=score_title,
+                content=content,
+                source=source,
+                published_at=row["published_at"],
+                preferences=preferences,
+                topic_swipe_stats=topic_swipe_stats,
+                source_swipe_stats=source_swipe_stats,
+                category_swipe_stats=category_swipe_stats,
+                category=classification.primary,
+                category_secondary=classification.secondary,
+            )
+
+        total_score = round(base_score + feedback_score, 2)
 
         update_article_enrichment(
             row["id"], base_score, total_score, topics, summary,
@@ -357,7 +398,13 @@ def rescore_all(preferences: dict | None = None) -> int:
     """Re-score all articles with base_score=0. Pure Python scoring, no LLM, single DB transaction."""
     if preferences is None:
         preferences = get_preferences()
-    topic_swipe_stats = get_topic_swipe_stats() if ADAPTIVE_SCORING_ENABLED else None
+    topic_swipe_stats = None
+    source_swipe_stats = None
+    category_swipe_stats = None
+    if ADAPTIVE_SCORING_ENABLED:
+        topic_swipe_stats, source_swipe_stats, category_swipe_stats = get_affinity_swipe_stats(
+            half_life_days=AFFINITY_HALF_LIFE_DAYS
+        )
     rows = fetch_unscored(limit=5000)
     if not rows:
         return 0
@@ -375,6 +422,10 @@ def rescore_all(preferences: dict | None = None) -> int:
             published_at=row["published_at"],
             preferences=preferences,
             topic_swipe_stats=topic_swipe_stats,
+            source_swipe_stats=source_swipe_stats,
+            category_swipe_stats=category_swipe_stats,
+            category=_row_value(row, "category"),
+            category_secondary=_row_value(row, "category_secondary"),
         )
         feedback_score = feedback_scores.get(row["id"], 0.0)
         total_score = round(base_score + feedback_score, 2)
@@ -403,6 +454,14 @@ def rescore_for_topics(changed_topics: list[str], preferences: dict | None = Non
     if preferences is None:
         preferences = get_preferences()
 
+    topic_swipe_stats = None
+    source_swipe_stats = None
+    category_swipe_stats = None
+    if ADAPTIVE_SCORING_ENABLED:
+        topic_swipe_stats, source_swipe_stats, category_swipe_stats = get_affinity_swipe_stats(
+            half_life_days=AFFINITY_HALF_LIFE_DAYS
+        )
+
     # Inverted-index lookup: O(n) scan but <5ms for thousands of rows
     rows = fetch_articles_by_topics(changed_topics)
     if not rows:
@@ -416,6 +475,11 @@ def rescore_for_topics(changed_topics: list[str], preferences: dict | None = Non
             source=row["source"],
             published_at=row["published_at"],
             preferences=preferences,
+            topic_swipe_stats=topic_swipe_stats,
+            source_swipe_stats=source_swipe_stats,
+            category_swipe_stats=category_swipe_stats,
+            category=_row_value(row, "category"),
+            category_secondary=_row_value(row, "category_secondary"),
         )
         feedback_score = float(row["feedback_score"] or 0.0)  # already fetched, no extra query
         total_score = round(base_score + feedback_score, 2)

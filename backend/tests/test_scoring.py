@@ -131,8 +131,7 @@ def test_user_interest_topic_boost():
         published_at=_ts(2)
     )
     assert score_with > score_without
-    # Interest topic boost is now 5.0 points (increased from 2.0)
-    assert any("Interest topic boost" in str(b["reason"]) and b.get("points") == 5.0 for b in breakdown)
+    assert any("Topic affinity" in str(b["reason"]) and b.get("points", 0) > 0 for b in breakdown)
 
 
 # ── User dislike penalty ──────────────────────────────────────────────────────
@@ -148,7 +147,7 @@ def test_user_dislike_topic_penalty():
         title="Tosi-tv tähti julkisuuden henkilö gossip reality", published_at=_ts(2)
     )
     assert score_disliked < score_neutral
-    assert any("Disliked topic penalty" in str(b["reason"]) for b in breakdown)
+    assert any("Topic affinity" in str(b["reason"]) and b.get("points", 0) < 0 for b in breakdown)
 
 
 # ── Feedback score integration ────────────────────────────────────────────────
@@ -222,7 +221,7 @@ def test_preference_boost_category_is_preference():
     _, _, breakdown = _score(
         title="AI chip machine learning breakthrough", published_at=_ts(2), prefs=prefs
     )
-    pref_items = [b for b in breakdown if "Interest" in b["reason"]]
+    pref_items = [b for b in breakdown if "Topic affinity" in b["reason"]]
     assert pref_items and pref_items[0]["category"] == "preference"
 
 
@@ -253,11 +252,11 @@ def test_adaptive_disabled_identical_to_baseline(monkeypatch):
 
 @freeze_time(FROZEN_NOW)
 def test_adaptive_enabled_high_positivity_boosts_score(monkeypatch):
-    """80% positive swipes on teknologia → adjusted weight is higher than baseline."""
+    """80% positive swipes on teknologia should increase score vs baseline."""
     import app.services.scoring as scoring_mod
     monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
-    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
+    monkeypatch.setattr(scoring_mod, "AFFINITY_MIN_SAMPLES", 5)
     stats = {"teknologia": {"positive": 8, "total": 10}}  # 80% positive
     score_baseline, _, _ = _score(
         title="AI chip machine learning", published_at=_ts(2)
@@ -266,16 +265,16 @@ def test_adaptive_enabled_high_positivity_boosts_score(monkeypatch):
         "AI chip machine learning", "", "x.fi", _ts(2), {}, topic_swipe_stats=stats
     )
     assert score_adaptive > score_baseline
-    assert any("Adaptive weight" in b["reason"] for b in breakdown)
+    assert any("Topic affinity" in b["reason"] for b in breakdown)
 
 
 @freeze_time(FROZEN_NOW)
 def test_adaptive_enabled_low_positivity_lowers_score(monkeypatch):
-    """20% positive swipes on teknologia → score is lower than baseline."""
+    """20% positive swipes on teknologia should lower score vs baseline."""
     import app.services.scoring as scoring_mod
     monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
-    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
+    monkeypatch.setattr(scoring_mod, "AFFINITY_MIN_SAMPLES", 5)
     stats = {"teknologia": {"positive": 2, "total": 10}}  # 20% positive
     score_baseline, _, _ = _score(
         title="AI chip machine learning", published_at=_ts(2)
@@ -288,12 +287,12 @@ def test_adaptive_enabled_low_positivity_lowers_score(monkeypatch):
 
 @freeze_time(FROZEN_NOW)
 def test_adaptive_insufficient_swipes_uses_baseline(monkeypatch):
-    """Below ADAPTIVE_MIN_SWIPES → no adjustment applied."""
+    """Below AFFINITY_MIN_SAMPLES there should be no swipe-driven topic effect."""
     import app.services.scoring as scoring_mod
     monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
-    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
-    stats = {"teknologia": {"positive": 4, "total": 4}}  # only 4 swipes, threshold=5
+    monkeypatch.setattr(scoring_mod, "AFFINITY_MIN_SAMPLES", 5)
+    stats = {"teknologia": {"positive": 4, "total": 4}}  # only 4 weighted samples
     score_baseline, _, _ = _score(
         title="AI chip machine learning", published_at=_ts(2)
     )
@@ -301,7 +300,7 @@ def test_adaptive_insufficient_swipes_uses_baseline(monkeypatch):
         "AI chip machine learning", "", "x.fi", _ts(2), {}, topic_swipe_stats=stats
     )
     assert score_adaptive == score_baseline
-    assert not any("Adaptive weight" in b["reason"] for b in breakdown)
+    assert not any("Topic affinity" in b["reason"] for b in breakdown)
 
 
 @freeze_time(FROZEN_NOW)
@@ -310,7 +309,7 @@ def test_scoring_version_v1_disables_adaptive_even_if_flag_on(monkeypatch):
 
     monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v1")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
-    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
+    monkeypatch.setattr(scoring_mod, "AFFINITY_MIN_SAMPLES", 5)
 
     stats = {"teknologia": {"positive": 9, "total": 10}}
     score_baseline, _, _ = _score(title="AI chip machine learning", published_at=_ts(2))
@@ -318,7 +317,7 @@ def test_scoring_version_v1_disables_adaptive_even_if_flag_on(monkeypatch):
         "AI chip machine learning", "", "x.fi", _ts(2), {}, topic_swipe_stats=stats
     )
     assert score_with_stats == score_baseline
-    assert not any("Adaptive weight" in b["reason"] for b in breakdown)
+    assert not any("Topic affinity" in b["reason"] for b in breakdown)
 
 
 @freeze_time(FROZEN_NOW)
@@ -327,7 +326,7 @@ def test_scoring_version_v2_enables_adaptive_when_flag_on(monkeypatch):
 
     monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
-    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
+    monkeypatch.setattr(scoring_mod, "AFFINITY_MIN_SAMPLES", 5)
 
     stats = {"teknologia": {"positive": 9, "total": 10}}
     score_baseline, _, _ = _score(title="AI chip machine learning", published_at=_ts(2))
@@ -335,4 +334,4 @@ def test_scoring_version_v2_enables_adaptive_when_flag_on(monkeypatch):
         "AI chip machine learning", "", "x.fi", _ts(2), {}, topic_swipe_stats=stats
     )
     assert score_with_stats > score_baseline
-    assert any("Adaptive weight" in b["reason"] for b in breakdown)
+    assert any("Topic affinity" in b["reason"] for b in breakdown)

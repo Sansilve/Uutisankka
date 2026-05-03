@@ -241,6 +241,25 @@ if SCORING_VERSION not in {"v1", "v2"}:
 # Minimum swipe count per topic before adaptive adjustment kicks in.
 ADAPTIVE_MIN_SWIPES: int = int(os.getenv("ADAPTIVE_MIN_SWIPES", "5"))
 
+# Unified affinity scoring parameters (topic/source/category).
+# p = (alpha + pos) / (alpha + beta + total)
+# signal = 2 * (p - 0.5)  -> range [-1, 1]
+AFFINITY_PRIOR_ALPHA: float = float(os.getenv("AFFINITY_PRIOR_ALPHA", "3.0"))
+AFFINITY_PRIOR_BETA: float = float(os.getenv("AFFINITY_PRIOR_BETA", "3.0"))
+AFFINITY_MIN_SAMPLES: float = float(os.getenv("AFFINITY_MIN_SAMPLES", "5.0"))
+AFFINITY_SIGNAL_MAX_ABS: float = float(os.getenv("AFFINITY_SIGNAL_MAX_ABS", "2.0"))
+AFFINITY_HALF_LIFE_DAYS: float = float(os.getenv("AFFINITY_HALF_LIFE_DAYS", "30.0"))
+
+# Per-signal weights. Category weight is intentionally 0 by default to avoid
+# double counting with topics; can be enabled later via env.
+AFFINITY_TOPIC_WEIGHT: float = float(os.getenv("AFFINITY_TOPIC_WEIGHT", "3.0"))
+AFFINITY_SOURCE_WEIGHT: float = float(os.getenv("AFFINITY_SOURCE_WEIGHT", "1.2"))
+AFFINITY_CATEGORY_WEIGHT: float = float(os.getenv("AFFINITY_CATEGORY_WEIGHT", "0.0"))
+
+# Explicit preference priors are injected as pseudo-observations so manual
+# likes/dislikes and swipe history share one scoring path.
+AFFINITY_EXPLICIT_TOPIC_PRIOR: float = float(os.getenv("AFFINITY_EXPLICIT_TOPIC_PRIOR", "6.0"))
+
 # Source quality tiers — governs pre-filter content-length requirements.
 # Domains not listed are treated as "medium".
 # low-tier sources require LOW_TIER_MIN_CONTENT_LENGTH characters before LLM call.

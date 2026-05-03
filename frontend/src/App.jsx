@@ -535,7 +535,7 @@ function PrefsPanel({ prefs, onSaved, onUnsavedChange }) {
 
       <div className="pref-section">
         <p className="pref-label">👎 Ei kiinnosta</p>
-        <p className="pref-hint">Valitseminen poistaa aiheen automaattisesti kiinnostaa-listalta</p>
+        <p className="pref-hint">Valitseminen poistaa aiheen kiinnostaa-listalta ja laskee aiheen pisteitä, mutta ei piilota artikkeleita</p>
         <div className="cat-chips">
           {ALL_TOPICS.map(({ id }) => {
             const active = dislikes.has(id)

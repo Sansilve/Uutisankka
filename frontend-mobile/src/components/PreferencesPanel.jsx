@@ -243,7 +243,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
         </View>
 
         <Text style={styles.sectionLabel}>Ei kiinnosta</Text>
-        <Text style={styles.hint}>Valitseminen poistaa aiheen automaattisesti kiinnostaa-listalta</Text>
+        <Text style={styles.hint}>Valitseminen poistaa aiheen kiinnostaa-listalta ja laskee aiheen pisteitä, mutta ei piilota artikkeleita</Text>
         <View style={styles.chips}>
           {ALL_TOPICS.map((c) => {
             const active  = dislikes.has(c.id)
