@@ -29,6 +29,7 @@ class SummaryPayload(BaseModel):
 class ScoreBreakdownItem(BaseModel):
     reason: str
     points: float
+    category: str = ""
 
 
 class ScoreBreakdownPayload(BaseModel):
@@ -50,6 +51,11 @@ class ArticleBrief(BaseModel):
     summary: SummaryPayload
     score_breakdown: ScoreBreakdownPayload
     is_paywall: bool = False
+    category: str | None = None
+    category_secondary: str | None = None
+    tone: str | None = None
+    tone_confidence: float | None = None
+    tone_reason: str | None = None
 
 
 class IngestResponse(BaseModel):

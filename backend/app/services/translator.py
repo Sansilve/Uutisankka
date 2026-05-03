@@ -9,7 +9,7 @@ This avoids two separate API calls (translate + summarize) per article.
 import logging
 import re
 
-from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
+from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, TRANSLATION_TARGET_LANG, TRANSLATION_TARGET_LANG_NAME
 from .llm import LLMUnavailable, chat_with_fallback, validate_llm_response
 
 log = logging.getLogger(__name__)
@@ -62,19 +62,22 @@ _LLM_AVAILABLE = bool(OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY)
 # Combined translate + summarize (one LLM call)
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """\
-Olet suomenkielinen uutistoimittaja. Saat englanninkielisen uutisen.
-Tee kaksi asiaa yhdessä vastauksessa:
+def _build_system_prompt(target_lang_name: str = TRANSLATION_TARGET_LANG_NAME) -> str:
+    return (
+        f"You are a professional news journalist writing in {target_lang_name}. "
+        f"You will receive an English-language news article.\n"
+        f"Do two things in one response:\n\n"
+        f"1. Translate the headline to {target_lang_name} — short, concise, max 100 characters.\n"
+        f"2. Summarize the article into 3–5 clear bullet points in {target_lang_name}.\n\n"
+        f"Respond EXACTLY in this format (add nothing else):\n"
+        f"HEADLINE: [translated headline in {target_lang_name}]\n"
+        f"- [bullet 1]\n"
+        f"- [bullet 2]\n"
+        f"- [bullet 3]"
+    )
 
-1. Käännä otsikko suomeksi — lyhyt, tiivis, max 100 merkkiä.
-2. Tiivistä artikkeli 3–5 selkeäksi bullet-pisteeksi suomeksi.
 
-Vastaa TÄSMÄLLEEN tässä muodossa (älä lisää mitään muuta):
-OTSIKKO: [suomeksi käännetty otsikko]
-- [bullet 1]
-- [bullet 2]
-- [bullet 3]\
-"""
+_SYSTEM_PROMPT = _build_system_prompt()
 
 
 def translate_and_summarize(
@@ -118,8 +121,8 @@ def translate_and_summarize(
         bullets: list[str] = []
 
         for line in lines:
-            if line.upper().startswith("OTSIKKO:"):
-                extracted = line[len("OTSIKKO:"):].strip()
+            if line.upper().startswith("HEADLINE:"):
+                extracted = line[len("HEADLINE:"):].strip()
                 if extracted:
                     finnish_title = extracted
             elif line.startswith(("-", "•", "*", "–")):
@@ -147,8 +150,8 @@ def translate_and_summarize(
             retry_title = finnish_title
             retry_bullets: list[str] = []
             for line in retry_lines:
-                if line.upper().startswith("OTSIKKO:"):
-                    extracted = line[len("OTSIKKO:"):].strip()
+                if line.upper().startswith("HEADLINE:"):
+                    extracted = line[len("HEADLINE:"):].strip()
                     if extracted:
                         retry_title = extracted
                 elif line.startswith(("-", "•", "*", "–")):
@@ -168,10 +171,10 @@ def translate_and_summarize(
     return title, _deterministic_summarize(title, content)
 
 
-_TITLE_ONLY_PROMPT = """\
-Käännä seuraava englanninkielinen uutisotsikko suomeksi. \
-Vastaa VAIN käännetyllä otsikolla, max 120 merkkiä, ei selityksiä.\
-"""
+_TITLE_ONLY_PROMPT = (
+    f"Translate the following English news headline to {TRANSLATION_TARGET_LANG_NAME}. "
+    f"Respond ONLY with the translated headline, max 120 characters, no explanations."
+)
 
 
 def translate_title(title: str) -> str | None:

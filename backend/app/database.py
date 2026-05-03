@@ -77,13 +77,6 @@ def init_db() -> None:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_swipe_history_swiped_at ON swipe_history (swiped_at DESC);
-
-                CREATE TABLE IF NOT EXISTS llm_cache (
-                    content_hash TEXT PRIMARY KEY,
-                    summary_json TEXT NOT NULL,
-                    translated_title TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
                 """
             )
             _ensure_column(conn, "articles", "base_score", "REAL DEFAULT 0")
@@ -91,6 +84,11 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "score_breakdown_json", "TEXT DEFAULT '{\"items\": []}'")
             _ensure_column(conn, "articles", "region", "TEXT NOT NULL DEFAULT 'suomi'")
             _ensure_column(conn, "articles", "is_paywall", "INTEGER NOT NULL DEFAULT 0")
+            _ensure_column(conn, "articles", "category", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "category_secondary", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "tone", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "tone_confidence", "REAL DEFAULT NULL")
+            _ensure_column(conn, "articles", "tone_reason", "TEXT DEFAULT NULL")
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 1")
@@ -275,41 +273,6 @@ def article_exists_with_hash(content_hash: str, limit_hours: int = 96) -> bool:
         conn.close()
 
 
-def get_llm_cache(content_hash: str) -> dict | None:
-    """Return cached LLM result for *content_hash*, or None if not present."""
-    conn = _conn()
-    try:
-        row = conn.execute(
-            "SELECT summary_json, translated_title FROM llm_cache WHERE content_hash = ?",
-            (content_hash,),
-        ).fetchone()
-        if row is None:
-            return None
-        return {
-            "summary_json": row["summary_json"],
-            "translated_title": row["translated_title"],
-        }
-    finally:
-        conn.close()
-
-
-def set_llm_cache(content_hash: str, summary_json: str, translated_title: str | None = None) -> None:
-    """Store an LLM result in the cache. Silently replaces any existing entry."""
-    with _db_lock:
-        conn = _conn()
-        try:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO llm_cache (content_hash, summary_json, translated_title)
-                VALUES (?, ?, ?)
-                """,
-                (content_hash, summary_json, translated_title),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-
 def recent_titles(limit: int = 250) -> list[str]:
     conn = _conn()
     try:
@@ -327,10 +290,9 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
     try:
         rows = conn.execute(
             """
-            SELECT id, title, source, published_at, content, url, content_hash
+            SELECT id, title, source, published_at, content, url
             FROM articles
-            WHERE summary_json IS NULL
-               OR summary_json = '{"bullets": []}'
+            WHERE summary_json = '{"bullets": []}'
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -488,6 +450,38 @@ def get_article_feedback_score(article_id: int) -> float:
         conn.close()
 
 
+def get_topic_swipe_stats() -> dict[str, dict[str, int]]:
+    """Return per-topic swipe counts from swipe_history joined with articles.
+
+    Returns:
+        {topic: {"positive": int, "total": int}}
+    """
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT a.topics, s.is_relevant
+            FROM swipe_history s
+            JOIN articles a ON a.id = s.article_id
+            WHERE a.topics IS NOT NULL AND a.topics != '[]'
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    stats: dict[str, dict[str, int]] = {}
+    for row in rows:
+        topics: list[str] = json.loads(row["topics"] or "[]")
+        is_positive = bool(row["is_relevant"])
+        for topic in topics:
+            if topic not in stats:
+                stats[topic] = {"positive": 0, "total": 0}
+            stats[topic]["total"] += 1
+            if is_positive:
+                stats[topic]["positive"] += 1
+    return stats
+
+
 def update_article_enrichment(
     article_id: int,
     base_score: float,
@@ -496,6 +490,11 @@ def update_article_enrichment(
     summary: dict[str, Any],
     score_breakdown: dict[str, Any],
     translated_title: str | None = None,
+    category: str | None = None,
+    category_secondary: str | None = None,
+    tone: str | None = None,
+    tone_confidence: float | None = None,
+    tone_reason: str | None = None,
 ) -> None:
     is_paywall_from_summary = 1 if summary.get("source") == "no_content" else 0
     with _db_lock:
@@ -509,7 +508,9 @@ def update_article_enrichment(
                     """
                     UPDATE articles
                     SET title = ?, base_score = ?, score = ?, topics = ?,
-                        summary_json = ?, score_breakdown_json = ?, is_paywall = ?
+                        summary_json = ?, score_breakdown_json = ?, is_paywall = ?,
+                        category = ?, category_secondary = ?,
+                        tone = ?, tone_confidence = ?, tone_reason = ?
                     WHERE id = ?
                     """,
                     (
@@ -520,6 +521,11 @@ def update_article_enrichment(
                         json.dumps(summary),
                         json.dumps(score_breakdown),
                         is_paywall,
+                        category,
+                        category_secondary,
+                        tone,
+                        tone_confidence,
+                        tone_reason,
                         article_id,
                     ),
                 )
@@ -527,7 +533,10 @@ def update_article_enrichment(
                 conn.execute(
                     """
                     UPDATE articles
-                    SET base_score = ?, score = ?, topics = ?, summary_json = ?, score_breakdown_json = ?, is_paywall = ?
+                    SET base_score = ?, score = ?, topics = ?, summary_json = ?,
+                        score_breakdown_json = ?, is_paywall = ?,
+                        category = ?, category_secondary = ?,
+                        tone = ?, tone_confidence = ?, tone_reason = ?
                     WHERE id = ?
                     """,
                     (
@@ -537,6 +546,11 @@ def update_article_enrichment(
                         json.dumps(summary),
                         json.dumps(score_breakdown),
                         is_paywall,
+                        category,
+                        category_secondary,
+                        tone,
+                        tone_confidence,
+                        tone_reason,
                         article_id,
                     ),
                 )

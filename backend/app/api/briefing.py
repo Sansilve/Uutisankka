@@ -56,6 +56,11 @@ def rows_to_briefing(rows) -> BriefingResponse:
                 summary=SummaryPayload(**summary),
                 score_breakdown=ScoreBreakdownPayload(**score_breakdown),
                 is_paywall=bool(row["is_paywall"]),
+                category=row["category"] if "category" in row.keys() else None,
+                category_secondary=row["category_secondary"] if "category_secondary" in row.keys() else None,
+                tone=row["tone"] if "tone" in row.keys() else None,
+                tone_confidence=row["tone_confidence"] if "tone_confidence" in row.keys() else None,
+                tone_reason=row["tone_reason"] if "tone_reason" in row.keys() else None,
             )
         )
     return BriefingResponse(generated_at=datetime.utcnow(), total=len(stories), stories=stories)

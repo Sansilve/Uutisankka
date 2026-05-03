@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 import feedparser
 
-from ..config import DEFAULT_FEEDS, FEED_REGIONS, TRANSLATION_SCORE_THRESHOLD
+from ..config import ADAPTIVE_SCORING_ENABLED, DEFAULT_FEEDS, FEED_REGIONS, LOW_TIER_MIN_CONTENT_LENGTH, MIN_CONTENT_LENGTH, SOURCE_QUALITY_TIERS, TRANSLATION_SCORE_THRESHOLD
 from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
@@ -22,6 +22,7 @@ from ..database import (
     fetch_untranslated_english,
     get_article_feedback_score,
     get_preferences,
+    get_topic_swipe_stats,
     insert_article,
     recent_titles,
     update_article_enrichment,
@@ -31,10 +32,24 @@ from ..database import (
 from .scoring import score_article
 from .summarizer import _deterministic_summarize, summarize_article
 from .translator import is_english_url, translate_and_summarize, translate_title
+from .classifier import classify_article
 
 
 TAG_RE = re.compile(r"<[^>]+>")
 log = logging.getLogger(__name__)
+
+
+def _source_tier(source_domain: str) -> str:
+    """Return quality tier ('high', 'medium', 'low') for a source domain."""
+    domain = source_domain.lower().removeprefix("www.")
+    return SOURCE_QUALITY_TIERS.get(domain, "medium")
+
+
+def _min_content_length(source_domain: str) -> int:
+    """Return the minimum content length threshold for a given source domain."""
+    if _source_tier(source_domain) == "low":
+        return LOW_TIER_MIN_CONTENT_LENGTH
+    return MIN_CONTENT_LENGTH
 
 
 def _clean(value: str | None) -> str:
@@ -159,21 +174,50 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
 def enrich_unprocessed_articles() -> int:
     """Generate summaries for new articles, then score anything unscored."""
     preferences = get_preferences()
+    topic_swipe_stats = get_topic_swipe_stats() if ADAPTIVE_SCORING_ENABLED else None
     count = 0
     filtered_below_threshold = 0
+    filtered_source_quality = 0
     llm_routed = 0
 
     # Step 1: summarise articles that have no summary yet
     for row in fetch_unenriched(limit=300):
         url = row["url"] or ""
         content = row["content"] or ""
+        source = row["source"] or ""
+
+        # Source quality pre-filter: low-tier sources need more content before LLM.
+        min_len = _min_content_length(source)
+        if len(content) < min_len:
+            if _source_tier(source) == "low":
+                log.debug(
+                    "enrich: skipping low-tier source '%s' — content %d < %d chars",
+                    source, len(content), min_len,
+                )
+                filtered_source_quality += 1
+                pre_base_score, pre_topics, pre_breakdown_items = score_article(
+                    title=row["title"], content=content, source=source,
+                    published_at=row["published_at"], preferences=preferences,
+                    topic_swipe_stats=topic_swipe_stats,
+                )
+                feedback_score = get_article_feedback_score(row["id"])
+                total_score = round(pre_base_score + feedback_score, 2)
+                summary = _deterministic_summarize(row["title"], content)
+                update_article_enrichment(
+                    row["id"], pre_base_score, total_score, pre_topics, summary,
+                    {"items": pre_breakdown_items}, translated_title=None,
+                )
+                count += 1
+                continue
+
 
         pre_base_score, pre_topics, pre_breakdown_items = score_article(
             title=row["title"],
             content=content,
-            source=row["source"],
+            source=source,
             published_at=row["published_at"],
             preferences=preferences,
+            topic_swipe_stats=topic_swipe_stats,
         )
 
         below_threshold = pre_base_score < TRANSLATION_SCORE_THRESHOLD
@@ -200,24 +244,41 @@ def enrich_unprocessed_articles() -> int:
             base_score, topics, breakdown_items = score_article(
                 title=score_title,
                 content=content,
-                source=row["source"],
+                source=source,
                 published_at=row["published_at"],
                 preferences=preferences,
+                topic_swipe_stats=topic_swipe_stats,
             )
 
         feedback_score = get_article_feedback_score(row["id"])
         total_score = round(base_score + feedback_score, 2)
+
+        # LLM category classification — runs only when LLM is routed (score above threshold)
+        classification = classify_article(
+            title=finnish_title or row["title"],
+            content=content,
+            source=source,
+            url=url,
+        ) if not below_threshold else None
+
         update_article_enrichment(
             row["id"], base_score, total_score, topics, summary,
-            {"items": breakdown_items}, translated_title=finnish_title,
+            {"items": breakdown_items},
+            translated_title=finnish_title,
+            category=classification.primary if classification else None,
+            category_secondary=classification.secondary if classification else None,
+            tone=classification.tone if classification else None,
+            tone_confidence=classification.tone_confidence if classification else None,
+            tone_reason=classification.tone_reason if classification else None,
         )
         count += 1
 
     log.info(
-        "enrich_unprocessed_articles: processed=%d llm_routed=%d filtered_below_threshold=%d threshold=%.2f",
+        "enrich_unprocessed_articles: processed=%d llm_routed=%d filtered_below_threshold=%d filtered_source_quality=%d threshold=%.2f",
         count,
         llm_routed,
         filtered_below_threshold,
+        filtered_source_quality,
         TRANSLATION_SCORE_THRESHOLD,
     )
 
@@ -252,6 +313,7 @@ def rescore_all(preferences: dict | None = None) -> int:
     """Re-score all articles with base_score=0. Pure Python scoring, no LLM, single DB transaction."""
     if preferences is None:
         preferences = get_preferences()
+    topic_swipe_stats = get_topic_swipe_stats() if ADAPTIVE_SCORING_ENABLED else None
     rows = fetch_unscored(limit=5000)
     if not rows:
         return 0
@@ -268,6 +330,7 @@ def rescore_all(preferences: dict | None = None) -> int:
             source=row["source"],
             published_at=row["published_at"],
             preferences=preferences,
+            topic_swipe_stats=topic_swipe_stats,
         )
         feedback_score = feedback_scores.get(row["id"], 0.0)
         total_score = round(base_score + feedback_score, 2)

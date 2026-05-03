@@ -1,11 +1,13 @@
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 from dateutil import parser
 
 from ..config import (
+    ADAPTIVE_MIN_SWIPES,
+    ADAPTIVE_SCORING_ENABLED,
     BREAKING_HINTS,
     CLICKBAIT_PATTERNS,
     LOW_SIGNAL_PATTERNS,
@@ -149,6 +151,7 @@ def score_article(
     source: str,
     published_at: str | None,
     preferences: dict[str, list[str]],
+    topic_swipe_stats: dict[str, dict[str, int]] | None = None,
 ) -> tuple[float, list[str], list[dict[str, float | str]]]:
     combined = f"{title} {content}".lower()
     topics = detect_topics(combined)
@@ -158,31 +161,51 @@ def score_article(
 
     if source in MAJOR_SOURCES:
         score += 1.0
-        breakdown.append({"reason": "Major source boost", "points": 1.0})
+        breakdown.append({"reason": "Major source boost", "points": 1.0, "category": "source"})
 
     for topic in topics:
         points = TOPIC_WEIGHTS.get(topic, 0.0)
         if points != 0:
             score += points
-            breakdown.append({"reason": f"Topic match: {topic}", "points": points})
+            breakdown.append({"reason": f"Topic match: {topic}", "points": points, "category": "topical"})
+
+    # Adaptive topic weight adjustment from swipe history (S4).
+    # Applied only when the feature flag is on and stats are supplied.
+    if ADAPTIVE_SCORING_ENABLED and topic_swipe_stats:
+        for topic in topics:
+            stats = topic_swipe_stats.get(topic)
+            if not stats or stats["total"] < ADAPTIVE_MIN_SWIPES:
+                continue
+            positivity = stats["positive"] / stats["total"]  # 0.0 – 1.0
+            # delta ∈ [-0.3, +0.3]; 0.5 positivity → 0 delta
+            delta = max(-0.3, min(0.3, (positivity - 0.5) * 0.6))
+            base = TOPIC_WEIGHTS.get(topic, 0.0)
+            adjustment = round(base * delta, 2)
+            if adjustment != 0.0:
+                score += adjustment
+                breakdown.append({
+                    "reason": f"Adaptive weight: {topic} ({stats['positive']}/{stats['total']} positive)",
+                    "points": adjustment,
+                    "category": "preference",
+                })
 
     for pattern in CLICKBAIT_PATTERNS:
         if re.search(pattern, combined):
             score -= 3.0
-            breakdown.append({"reason": f"Clickbait pattern: {pattern}", "points": -3.0})
+            breakdown.append({"reason": f"Clickbait pattern: {pattern}", "points": -3.0, "category": "quality"})
 
     for pattern in LOW_SIGNAL_PATTERNS:
         if re.search(pattern, combined):
             score -= 1.8
-            breakdown.append({"reason": f"Low-signal pattern: {pattern}", "points": -1.8})
+            breakdown.append({"reason": f"Low-signal pattern: {pattern}", "points": -1.8, "category": "quality"})
 
     if title.count("!") >= 2 or title.isupper():
         score -= 2.0
-        breakdown.append({"reason": "Aggressive title penalty", "points": -2.0})
+        breakdown.append({"reason": "Aggressive title penalty", "points": -2.0, "category": "quality"})
 
     if any(token in combined for token in BREAKING_HINTS):
         score += 1.2
-        breakdown.append({"reason": "Breaking news hint", "points": 1.2})
+        breakdown.append({"reason": "Breaking news hint", "points": 1.2, "category": "quality"})
 
     interests = {item.lower() for item in preferences.get("interests", [])}
     dislikes = {item.lower() for item in preferences.get("disliked_topics", [])}
@@ -190,23 +213,23 @@ def score_article(
     for interest in interests:
         if interest in topics:
             score += 2.0
-            breakdown.append({"reason": f"Interest topic boost: {interest}", "points": 2.0})
+            breakdown.append({"reason": f"Interest topic boost: {interest}", "points": 2.0, "category": "preference"})
         elif interest in combined:
             score += 0.8
-            breakdown.append({"reason": f"Interest text boost: {interest}", "points": 0.8})
+            breakdown.append({"reason": f"Interest text boost: {interest}", "points": 0.8, "category": "preference"})
 
     for dislike in dislikes:
         if dislike in topics:
             score -= 3.0
-            breakdown.append({"reason": f"Disliked topic penalty: {dislike}", "points": -3.0})
+            breakdown.append({"reason": f"Disliked topic penalty: {dislike}", "points": -3.0, "category": "preference"})
         elif dislike in combined:
             score -= 1.0
-            breakdown.append({"reason": f"Disliked text penalty: {dislike}", "points": -1.0})
+            breakdown.append({"reason": f"Disliked text penalty: {dislike}", "points": -1.0, "category": "preference"})
 
     recency_points = _recency_boost(published_at)
     score += recency_points
     if recency_points != 0:
-        breakdown.append({"reason": "Recency adjustment", "points": round(recency_points, 2)})
+        breakdown.append({"reason": "Recency adjustment", "points": round(recency_points, 2), "category": "freshness"})
 
     return round(score, 2), topics, breakdown
 
