@@ -353,14 +353,37 @@ def _call_openai_like(
     provider_name: str,
     max_rps: float,
 ) -> str:
-    _throttle(provider_name, max_rps)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return (resp.choices[0].message.content or "").strip()
+    """Call OpenAI-compatible API with exponential backoff on 429 rate limits."""
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        _throttle(provider_name, max_rps)
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            # Handle 429 (rate limit) with exponential backoff
+            error_str = str(e).lower()
+            if "429" in error_str or "rate limit" in error_str:
+                if attempt < max_retries:
+                    # Exponential backoff: 1s, 2s, 4s
+                    wait_time = 2 ** attempt
+                    log.warning("provider %s rate limit (429): retrying after %ds (attempt %d/%d)", 
+                               provider_name, wait_time, attempt + 1, max_retries)
+                    _record_metric(provider_name, "rate_limit_count", 1)
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Max retries exhausted
+                    log.error("provider %s rate limit (429): max retries exhausted", provider_name)
+                    _record_metric(provider_name, "rate_limit_count", 1)
+                    raise LLMUnavailable(f"Rate limit from {provider_name} after {max_retries} retries")
+            # Non-429 error: raise immediately
+            raise
 
 
 def _call_gemini(
@@ -395,16 +418,20 @@ def chat_with_fallback(
     premium: bool = False,
     validator: Callable[[str], tuple[bool, str] | bool] | None = None,
 ) -> str:
-    """Call LLM providers with throttled queueing.
+    """Call LLM providers with throttled queueing and latency-aware skipping.
 
     Default mode (premium=False): actively rotate low-cost providers first
-    (fallback1/gemini), then OpenAI as a final safety net.
+    (fallback/gemini), then OpenAI as a final safety net.
 
     Premium mode (premium=True): OpenAI first, then low-cost providers.
+    
+    Smart skipping: providers with P95 latency > threshold are skipped to avoid cascades.
     
     Raises LLMUnavailable if all providers fail or are unconfigured.
     Returns the raw response text string.
     """
+    from ..config import PROVIDER_P95_SKIP_THRESHOLD_MS
+    
     low_cost = _low_cost_order()
 
     provider_order: list[str]
@@ -417,6 +444,15 @@ def chat_with_fallback(
     for provider_name in provider_order:
         provider = _provider_registry.get(provider_name)
         if provider is None or not provider.is_available():
+            continue
+        
+        # Skip provider if P95 latency is too high
+        stats = get_llm_stats()
+        provider_stats = stats.get(provider_name, {})
+        p95_ms = provider_stats.get("p95_ms", 0.0)
+        if p95_ms > PROVIDER_P95_SKIP_THRESHOLD_MS:
+            log.debug("skip provider %s: P95 latency %.0fms exceeds threshold %.0fms", 
+                     provider_name, p95_ms, PROVIDER_P95_SKIP_THRESHOLD_MS)
             continue
 
         tried_any = True

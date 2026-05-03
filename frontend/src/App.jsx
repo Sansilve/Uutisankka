@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   fetchArticles,
+  fetchArticleStats,
   fetchBriefing,
   fetchHistory,
   fetchMetrics,
@@ -12,6 +13,8 @@ import {
   triggerReenrich,
   updatePreferences,
 } from './api'
+import ToneDashboard from './components/ToneDashboard'
+import ObservabilityPanel from './components/ObservabilityPanel'
 import './App.css'
 
 // ── Topic & source config (mirrored from mobile) ──────────────────────────────
@@ -125,6 +128,12 @@ function formatDateFi(dateStr) {
   return d.toLocaleDateString('fi-FI', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
+function normalizeDisplayText(text) {
+  if (!text) return text
+  // Common typo seen in generated summaries.
+  return text.replace(/\bmksumuur/gi, 'maksumuur')
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 function TopicBadge({ topic }) {
   return (
@@ -134,22 +143,31 @@ function TopicBadge({ topic }) {
   )
 }
 
-function StoryCard({ story, onRate, busy }) {
+function StoryCard({ story, onRate, busy, initialVoted = null }) {
   const [expanded, setExpanded] = useState(false)
-  const [voted, setVoted] = useState(null)
+  const [voted, setVoted] = useState(initialVoted)
 
   async function handleRate(isRelevant) {
     if (voted !== null || busy) return
-    setVoted(isRelevant ? 'yes' : 'no')
-    await onRate(story.id, isRelevant)
+    const nextVote = isRelevant ? 'yes' : 'no'
+    setVoted(nextVote)
+    try {
+      await onRate(story.id, isRelevant)
+    } catch {
+      setVoted(null)
+    }
   }
 
+  const cardClass = `card${voted === 'yes' ? ' card--voted-yes' : voted === 'no' ? ' card--voted-no' : ''}`
+
   return (
-    <article className={`card${voted ? ' card--voted' : ''}`}>
+    <article className={cardClass}>
       <div className="card-meta">
         <span className="card-source">{cleanSource(story.source)}</span>
         {story.score != null && <span className="card-score">{story.score.toFixed(1)} pts</span>}
         {story.is_paywall && <span className="paywall-badge">🔒 Maksumuuri</span>}
+        {voted === 'yes' && <span className="vote-stamp vote-stamp--yes">✓ Kiinnostaa</span>}
+        {voted === 'no' && <span className="vote-stamp vote-stamp--no">× Ohitettu</span>}
         {story.published_at && <span className="card-date">{formatPubDate(story.published_at)}</span>}
       </div>
       <h2 className="card-title">
@@ -157,7 +175,7 @@ function StoryCard({ story, onRate, busy }) {
       </h2>
       <ul className="card-bullets">
         {(story.summary?.bullets || []).slice(0, 4).map((b, i) => (
-          <li key={i}>{b}</li>
+          <li key={i}>{normalizeDisplayText(b)}</li>
         ))}
       </ul>
       {story.topics?.length > 0 && (
@@ -274,22 +292,50 @@ function HistoryView() {
 }
 
 function AllArticlesView() {
+  const PAGE_SIZE = 50
+
   const [articles, setArticles] = useState([])
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [stats, setStats] = useState(null)
   const [topicFilter, setTopicFilter] = useState('all')
   const [regionFilter, setRegionFilter] = useState('all')
 
   useEffect(() => {
-    fetchArticles(100, true)
-      .then(data => { setArticles(data.items || []); setLoading(false) })
+    // Fetch real totals independently of pagination
+    fetchArticleStats().then(setStats).catch(() => {})
+    // First page
+    fetchArticles(PAGE_SIZE, true, 0)
+      .then(data => {
+        const items = data.items || []
+        setArticles(items)
+        setHasMore(items.length === PAGE_SIZE)
+        setOffset(PAGE_SIZE)
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [])
+
+  function loadMore() {
+    setLoadingMore(true)
+    fetchArticles(PAGE_SIZE, true, offset)
+      .then(data => {
+        const items = data.items || []
+        setArticles(prev => [...prev, ...items])
+        setHasMore(items.length === PAGE_SIZE)
+        setOffset(prev => prev + PAGE_SIZE)
+        setLoadingMore(false)
+      })
+      .catch(() => setLoadingMore(false))
+  }
 
   const filtered = articles
     .filter(a => topicFilter === 'all' || (a.topics || []).includes(topicFilter))
     .filter(a => regionFilter === 'all' || a.region === regionFilter)
 
-  // Stats
+  // Topic distribution from loaded articles only (for filter chips)
   const topicCounts = {}
   for (const a of articles) {
     for (const t of (a.topics || [])) {
@@ -297,9 +343,6 @@ function AllArticlesView() {
     }
   }
   const topTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
-  const paywallCount = articles.filter(a => a.is_paywall).length
-  const regions = { suomi: 0, maailma: 0 }
-  for (const a of articles) { if (regions[a.region] !== undefined) regions[a.region]++ }
 
   if (loading) return <p className="empty">Ladataan artikkeleita...</p>
 
@@ -307,19 +350,19 @@ function AllArticlesView() {
     <div>
       <div className="data-stats">
         <div className="stat-card">
-          <div className="stat-num">{articles.length}</div>
+          <div className="stat-num">{stats ? stats.total : articles.length}</div>
           <div className="stat-label">Artikkelia</div>
         </div>
         <div className="stat-card">
-          <div className="stat-num">{regions.suomi}</div>
+          <div className="stat-num">{stats ? stats.suomi : '–'}</div>
           <div className="stat-label">🇫🇮 Suomi</div>
         </div>
         <div className="stat-card">
-          <div className="stat-num">{regions.maailma}</div>
+          <div className="stat-num">{stats ? stats.maailma : '–'}</div>
           <div className="stat-label">🌍 Maailma</div>
         </div>
         <div className="stat-card">
-          <div className="stat-num">{paywallCount}</div>
+          <div className="stat-num">{stats ? stats.paywall : '–'}</div>
           <div className="stat-label">🔒 Maksumuuri</div>
         </div>
       </div>
@@ -356,6 +399,18 @@ function AllArticlesView() {
           <StoryCard key={a.id} story={a} onRate={null} busy={false} />
         ))}
       </div>
+
+      {hasMore && (
+        <div style={{ textAlign: 'center', padding: '1.2rem 0' }}>
+          <button
+            className="btn-load-more"
+            onClick={loadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? 'Ladataan...' : `Lataa lisää (näytetään ${articles.length}${stats ? ` / ${stats.total}` : ''})`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -480,7 +535,7 @@ function PrefsPanel({ prefs, onSaved, onUnsavedChange }) {
 
       <div className="pref-section">
         <p className="pref-label">👎 Ei kiinnosta</p>
-        <p className="pref-hint">Valitseminen poistaa aiheen automaattisesti kiinnostaa-listalta</p>
+        <p className="pref-hint">Valitseminen poistaa aiheen kiinnostaa-listalta ja laskee aiheen pisteitä, mutta ei piilota artikkeleita</p>
         <div className="cat-chips">
           {ALL_TOPICS.map(({ id }) => {
             const active = dislikes.has(id)
@@ -634,6 +689,7 @@ export default function App() {
   const [briefingMode, setBriefingMode] = useState('top') // 'top' | 'random'
   const [status, setStatus] = useState('')
   const [unsaved, setUnsaved] = useState(false)
+  const [ratedStories, setRatedStories] = useState({})
   const [metrics, setMetrics] = useState({ total_feedback_votes: 0, positive_feedback_ratio: null })
   const [busy, setBusy] = useState(false)
   const [briefingLimit] = useState(() => {
@@ -695,7 +751,12 @@ export default function App() {
   async function rateStory(articleId, isRelevant) {
     try {
       await sendFeedback({ article_id: articleId, is_relevant: isRelevant })
-    } catch (e) { setStatus(`Virhe: ${e.message}`) }
+      setRatedStories(prev => ({ ...prev, [articleId]: isRelevant ? 'yes' : 'no' }))
+      setStatus(isRelevant ? '✓ Kiinnostaa – tallennettu' : '× Ohitettu – tallennettu')
+    } catch (e) {
+      setStatus(`Virhe: ${e.message}`)
+      throw e
+    }
   }
 
   if (!onboarded) {
@@ -731,6 +792,7 @@ export default function App() {
           { key: 'all', label: '📋 Kaikki' },
           { key: 'history', label: '🕐 Historia' },
           { key: 'prefs', label: '⚙️ Asetukset' },
+          { key: 'admin', label: '🔧 Admin' },
         ].map(({ key, label }) => (
           <button key={key} className={`tab${activeTab === key ? ' tab--active' : ''}`} onClick={() => setActiveTab(key)}>
             {label}
@@ -761,7 +823,13 @@ export default function App() {
           {busy && briefing.stories.length === 0 && <p className="empty">Ladataan...</p>}
           {!busy && briefing.stories.length === 0 && <p className="empty">Ei uutisia – paina Päivitä.</p>}
           {briefing.stories.map(story => (
-            <StoryCard key={story.id} story={story} onRate={rateStory} busy={false} />
+            <StoryCard
+              key={story.id}
+              story={story}
+              onRate={rateStory}
+              busy={false}
+              initialVoted={ratedStories[story.id] ?? null}
+            />
           ))}
         </section>
       )}
@@ -776,6 +844,14 @@ export default function App() {
         />
       )}
       {activeTab === 'prefs' && !prefs && <p className="empty">Ladataan asetuksia...</p>}
+
+      {activeTab === 'admin' && (
+        <section style={{ padding: '20px' }}>
+          <h2>📊 Admin Dashboards</h2>
+          <ToneDashboard metrics={metrics} />
+          <ObservabilityPanel metrics={metrics} />
+        </section>
+      )}
     </div>
   )
 }

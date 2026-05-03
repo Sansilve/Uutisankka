@@ -1,0 +1,161 @@
+import { Linking, Platform, Share, StyleSheet, TouchableOpacity, View } from 'react-native'
+import { useState } from 'react'
+import { Text } from 'react-native'
+
+const SHARE_OPTIONS = [
+  { key: 'clipboard', label: '📋 Kopioi linkki', icon: '📋' },
+  { key: 'share', label: '📤 Jaa', icon: '📤' },
+  { key: 'telegram', label: '💬 Telegram', icon: '💬' },
+  { key: 'email', label: '✉️ Sähköposti', icon: '✉️' },
+]
+
+export default function ShareButton({ article }) {
+  const [showMenu, setShowMenu] = useState(false)
+
+  const handleCopyLink = () => {
+    // Note: Clipboard API would need react-native-clipboard or similar
+    // For now, we'll use a fallback alert
+    const message = `${article.title}\n${article.url}`
+    console.log('Copy to clipboard:', message)
+    setShowMenu(false)
+  }
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Lue: ${article.title}\n${article.url}`,
+        title: article.title,
+        url: article.url,
+      })
+      setShowMenu(false)
+    } catch (error) {
+      console.error('Share failed:', error)
+    }
+  }
+
+  const handleTelegram = () => {
+    const message = encodeURIComponent(`Lue: ${article.title}\n${article.url}`)
+    const deepLink = `tg://msg?text=${message}`
+    Linking.openURL(deepLink).catch(() => {
+      // Fallback to web
+      Linking.openURL('https://telegram.me/?text=' + message)
+    })
+    setShowMenu(false)
+  }
+
+  const handleEmail = () => {
+    const subject = encodeURIComponent(`Kiinnostava uutinen: ${article.title}`)
+    const body = encodeURIComponent(`Lue tämä:\n\n${article.title}\n\n${article.url}`)
+    Linking.openURL(`mailto:?subject=${subject}&body=${body}`)
+    setShowMenu(false)
+  }
+
+  const handleOption = (option) => {
+    switch (option) {
+      case 'clipboard':
+        handleCopyLink()
+        break
+      case 'share':
+        handleShare()
+        break
+      case 'telegram':
+        handleTelegram()
+        break
+      case 'email':
+        handleEmail()
+        break
+      default:
+        break
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.shareButton}
+        onPress={() => setShowMenu(!showMenu)}
+      >
+        <Text style={styles.shareButtonText}>📤 Jaa</Text>
+      </TouchableOpacity>
+
+      {showMenu && (
+        <>
+          <View
+            style={styles.backdrop}
+            onTouchEnd={() => setShowMenu(false)}
+          />
+          <View style={styles.menu}>
+            {SHARE_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={styles.menuItem}
+                onPress={() => handleOption(option.key)}
+              >
+                <Text style={styles.menuItemIcon}>{option.icon}</Text>
+                <Text style={styles.menuItemLabel}>{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  shareButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  shareButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9,
+  },
+  menu: {
+    position: 'absolute',
+    top: 36,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    minWidth: 150,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    zIndex: 10,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  menuItemIcon: {
+    fontSize: 16,
+  },
+  menuItemLabel: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+})

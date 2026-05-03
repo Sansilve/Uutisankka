@@ -10,11 +10,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import { useState } from 'react'
 import ArticleCard from './src/components/ArticleCard'
 import AllNewsScreen from './src/components/AllNewsScreen'
 import HistoryScreen from './src/components/HistoryScreen'
 import OnboardingScreen from './src/components/OnboardingScreen'
 import PreferencesPanel from './src/components/PreferencesPanel'
+import SwipeTutorialOverlay from './src/components/SwipeTutorialOverlay'
+import SearchFilterPanel from './src/components/SearchFilterPanel'
 import useAppNavigation from './src/navigation/useAppNavigation'
 import { APP_ROUTES } from './src/navigation/routes'
 import useBriefingState from './src/state/useBriefingState'
@@ -31,12 +34,15 @@ import {
 
 const DAILY_LIMIT = 8
 
-function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews }) {
+function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews, onOpenFilter }) {
   return (
     <View style={styles.masthead}>
       <View style={styles.mastheadTop}>
         <Text style={styles.mastheadName}>🦆 UutisAnkka</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.settingsButton} onPress={onOpenFilter}>
+            <Text style={styles.settingsButtonText}>🔍</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.settingsButton} onPress={onOpenAllNews}>
             <Text style={styles.settingsButtonText}>Kaikki</Text>
           </TouchableOpacity>
@@ -132,6 +138,9 @@ function CompletionScreen({ ratings, onRestart, onShowMore, onOpenSettings, busy
 }
 
 export default function App() {
+  const [showFilter, setShowFilter] = useState(false)
+  const [selectedTopics, setSelectedTopics] = useState([])
+  
   useWindowDimensions()
   const { route, openFeed, openHistory, openAllNews, openSettings } = useAppNavigation()
   const { preferences, applyPreferences } = usePreferencesState()
@@ -153,6 +162,7 @@ export default function App() {
   } = useBriefingState(DAILY_LIMIT)
   const {
     onboardingDone,
+    swipeTutorialShown,
     loading,
     busy,
     statusMsg,
@@ -164,6 +174,7 @@ export default function App() {
     markFatalError,
     clearFatalError,
     completeOnboarding,
+    markSwipeTutorialShown,
   } = useSessionUiState()
 
   async function loadData() {
@@ -307,6 +318,12 @@ export default function App() {
     )
   }
 
+  const handleToggleTopic = (topic) => {
+    setSelectedTopics((prev) =>
+      prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic]
+    )
+  }
+
   if (route === APP_ROUTES.ALL_NEWS) {
     return (
       <SafeAreaView style={styles.root}>
@@ -348,6 +365,7 @@ export default function App() {
         onOpenSettings={openSettings}
         onOpenHistory={openHistory}
         onOpenAllNews={openAllNews}
+        onOpenFilter={() => setShowFilter(true)}
       />
 
       {statusMsg ? (
@@ -355,6 +373,14 @@ export default function App() {
           <Text style={styles.statusText}>{statusMsg}</Text>
         </View>
       ) : null}
+
+      {showFilter && (
+        <SearchFilterPanel
+          selectedTopics={selectedTopics}
+          onToggleTopic={handleToggleTopic}
+          onClose={() => setShowFilter(false)}
+        />
+      )}
 
       {isComplete ? (
         <CompletionScreen
@@ -365,23 +391,69 @@ export default function App() {
           busy={busy}
         />
       ) : activeStory ? (
-        <ArticleCard
-          story={activeStory}
-          onDecision={handleDecision}
-          disabled={busy}
-          progressText={`${progressCount} / ${total}`}
-          progressWidth={progressWidth}
-          onSurprise={handleSurprise}
-        />
+        <View style={{ flex: 1, position: 'relative' }}>
+          <ArticleCard
+            story={activeStory}
+            onDecision={handleDecision}
+            disabled={busy}
+            progressText={`${progressCount} / ${total}`}
+            progressWidth={progressWidth}
+            onSurprise={handleSurprise}
+          />
+          {swipeTutorialShown === false ? (
+            <SwipeTutorialOverlay onDismiss={markSwipeTutorialShown} />
+          ) : null}
+        </View>
       ) : (
         <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>Ei uutisia juuri nyt</Text>
-          <Text style={styles.emptyBody}>
-            Päivitä syötteet tai kokeile uudelleen hetken päästä.
-          </Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleShowMore} disabled={busy}>
-            <Text style={styles.primaryButtonText}>Päivitä uutiset</Text>
-          </TouchableOpacity>
+          {loading ? (
+            <>
+              <Text style={styles.emptyEmoji}>⏳</Text>
+              <Text style={styles.emptyTitle}>Haetaan uutisia...</Text>
+              <ActivityIndicator color="#FFB700" size="large" />
+            </>
+          ) : total === 0 ? (
+            <>
+              <Text style={styles.emptyEmoji}>🚫</Text>
+              <Text style={styles.emptyTitle}>Ei uutisia saatavilla</Text>
+              <Text style={styles.emptyBody}>
+                Mitään uutisia ei vastaa nykyisiä suodattimia. Kokeile muuttaa asetuksia tai palaa myöhemmin.
+              </Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={openSettings}>
+                <Text style={styles.primaryButtonText}>Muokkaa asetuksia</Text>
+              </TouchableOpacity>
+            </>
+          ) : isComplete ? (
+            <>
+              <Text style={styles.emptyEmoji}>✅</Text>
+              <Text style={styles.emptyTitle}>Kaikki uutiset luettu</Text>
+              <Text style={styles.emptyBody}>
+                Olet käynyt läpi kaikki tämän päivän uutiset! Palaa myöhemmin, kun uusia uutisia ilmestyy.
+              </Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleShowMore} disabled={busy}>
+                {busy ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Hae lisää uutisia</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyEmoji}>🤔</Text>
+              <Text style={styles.emptyTitle}>Ei uutisia juuri nyt</Text>
+              <Text style={styles.emptyBody}>
+                Syötteessä ei ole uusia uutisia. Kokeile päivittää tai palaa hetken päästä.
+              </Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleShowMore} disabled={busy}>
+                {busy ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Päivitä uutiset</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       )}
     </SafeAreaView>
@@ -696,6 +768,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     gap: 14,
+  },
+  emptyEmoji: {
+    fontSize: 64,
+    marginBottom: 8,
   },
   emptyTitle: {
     color: '#1a1a1a',

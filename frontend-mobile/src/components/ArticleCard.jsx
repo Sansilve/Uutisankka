@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import ShareButton from './ShareButton'
 
 // Dark, muted newspaper-style topic colors
 const TOPIC_COLORS = {
@@ -118,6 +119,34 @@ function formatPubDate(isoStr) {
 function bulletsToLead(bullets) {
   if (!bullets || bullets.length === 0) return ''
   return bullets.slice(0, 3).join(' ')
+}
+
+function getToneEmoji(tone) {
+  if (!tone) return null
+  switch (tone.toLowerCase()) {
+    case 'positive':
+      return '😊'
+    case 'neutral':
+      return '😐'
+    case 'negative':
+      return '😔'
+    default:
+      return null
+  }
+}
+
+function getToneLabel(tone) {
+  if (!tone) return null
+  switch (tone.toLowerCase()) {
+    case 'positive':
+      return 'Positiivinen'
+    case 'neutral':
+      return 'Neutraali'
+    case 'negative':
+      return 'Negatiivinen'
+    default:
+      return null
+  }
 }
 
 export default function ArticleCard({
@@ -253,6 +282,11 @@ export default function ArticleCard({
                   </Text>
                 </View>
               ))}
+              {story.tone && (
+                <View style={styles.toneBadge} title={`${getToneLabel(story.tone)} (${story.tone_confidence ? (story.tone_confidence * 100).toFixed(0) : '?'}%)`}>
+                  <Text style={styles.toneBadgeText}>{getToneEmoji(story.tone)} {getToneLabel(story.tone)}</Text>
+                </View>
+              )}
               {story.is_paywall && (
                 <View style={styles.paywallBadge}>
                   <Text style={styles.paywallBadgeText}>🔒 Maksumuuri</Text>
@@ -324,9 +358,12 @@ export default function ArticleCard({
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(story.url)}>
-            <Text style={styles.linkText}>Lue alkuperäinen →</Text>
-          </TouchableOpacity>
+          <View style={styles.footerActions}>
+            <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(story.url)}>
+              <Text style={styles.linkText}>Lue alkuperäinen →</Text>
+            </TouchableOpacity>
+            <ShareButton article={story} />
+          </View>
         </Animated.View>
       </View>
 
@@ -464,6 +501,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  toneBadge: {
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    borderRadius: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: '#f9fafb',
+  },
+  toneBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#4b5563',
   },
   paywallBadge: {
     borderWidth: 1,
@@ -644,9 +694,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
   },
-  linkButton: {
-    alignSelf: 'center',
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
     marginTop: 12,
+  },
+  linkButton: {
     borderBottomWidth: 1,
     borderBottomColor: '#FFB700',
     paddingBottom: 1,

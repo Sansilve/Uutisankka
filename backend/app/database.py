@@ -1,4 +1,5 @@
 import json
+import math
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -100,7 +101,7 @@ def init_db() -> None:
 
 def ensure_default_preferences() -> None:
     default_interests = ["technology", "politics", "economy"]
-    default_dislikes = ["celebrity", "entertainment"]
+    default_dislikes: list[str] = []
     upsert_preferences(default_interests, default_dislikes, only_if_missing=True)
 
 
@@ -156,7 +157,7 @@ def get_preferences() -> dict:
         if not row:
             return {
                 "interests": ["politiikka", "teknologia", "talous"],
-                "disliked_topics": ["viihde", "celebrity"],
+                "disliked_topics": [],
                 "news_scope": ["suomi", "maailma"],
                 "local_city": "",
                 "hide_paywall": True,
@@ -174,7 +175,7 @@ def get_preferences() -> dict:
         conn.close()
 
 
-def random_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list:
+def random_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list:
     """Return *limit* random enriched articles (score > 0), shuffled each call."""
     conn = _conn()
     try:
@@ -184,16 +185,6 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
             placeholders = ",".join("?" * len(region_filters))
             where_region = f"AND a.region IN ({placeholders})"
             params.extend(region_filters)
-
-        where_dislikes = ""
-        if disliked_topics:
-            dp = ",".join("?" * len(disliked_topics))
-            where_dislikes = f"""
-              AND NOT EXISTS (
-                  SELECT 1 FROM json_each(a.topics)
-                  WHERE json_each.value IN ({dp})
-              )"""
-            params.extend(disliked_topics)
 
         where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
         
@@ -217,7 +208,6 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, di
             LEFT JOIN article_feedback f ON f.article_id = a.id
             WHERE a.score > 0
               {where_region}
-              {where_dislikes}
               {where_paywall}
               {where_sources}
             ORDER BY RANDOM()
@@ -290,7 +280,7 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
     try:
         rows = conn.execute(
             """
-            SELECT id, title, source, published_at, content, url
+            SELECT id, title, source, published_at, content, url, category, category_secondary
             FROM articles
             WHERE summary_json = '{"bullets": []}'
             ORDER BY created_at DESC
@@ -342,7 +332,7 @@ def fetch_unscored(limit: int = 5000) -> list[sqlite3.Row]:
     try:
         rows = conn.execute(
             """
-            SELECT id, title, source, published_at, content
+            SELECT id, title, source, published_at, content, category, category_secondary
             FROM articles
             WHERE base_score = 0
               AND summary_json != '{"bullets": []}'
@@ -400,7 +390,8 @@ def fetch_articles_by_topics(topics: list[str]) -> list[sqlite3.Row]:
     try:
         return conn.execute(
             f"""
-            SELECT id, title, content, source, published_at, feedback_score
+            SELECT id, title, content, source, published_at, feedback_score,
+                   category, category_secondary
             FROM articles
             WHERE topics IS NOT NULL
               AND topics != '[]'
@@ -456,30 +447,74 @@ def get_topic_swipe_stats() -> dict[str, dict[str, int]]:
     Returns:
         {topic: {"positive": int, "total": int}}
     """
+    topic_stats, _, _ = get_affinity_swipe_stats()
+    return {
+        topic: {
+            "positive": int(round(values["positive"])),
+            "total": int(round(values["total"])),
+        }
+        for topic, values in topic_stats.items()
+    }
+
+
+def get_affinity_swipe_stats(half_life_days: float = 30.0) -> tuple[
+    dict[str, dict[str, float]],
+    dict[str, dict[str, float]],
+    dict[str, dict[str, float]],
+]:
+    """Return decayed swipe stats for topic, source and category."""
     conn = _conn()
     try:
         rows = conn.execute(
             """
-            SELECT a.topics, s.is_relevant
+            SELECT a.topics, a.source, a.category, a.category_secondary,
+                   s.is_relevant, s.swiped_at
             FROM swipe_history s
             JOIN articles a ON a.id = s.article_id
-            WHERE a.topics IS NOT NULL AND a.topics != '[]'
             """
         ).fetchall()
     finally:
         conn.close()
 
-    stats: dict[str, dict[str, int]] = {}
+    topic_stats: dict[str, dict[str, float]] = {}
+    source_stats: dict[str, dict[str, float]] = {}
+    category_stats: dict[str, dict[str, float]] = {}
+
+    now = datetime.utcnow()
+    safe_half_life = max(1.0, float(half_life_days))
+
+    def _weight(swiped_at: str | None) -> float:
+        if not swiped_at:
+            return 1.0
+        try:
+            dt = datetime.fromisoformat(swiped_at.replace("Z", "+00:00"))
+            age_days = max(0.0, (now - dt.replace(tzinfo=None)).total_seconds() / 86400.0)
+            return math.pow(0.5, age_days / safe_half_life)
+        except Exception:
+            return 1.0
+
+    def _add(stats: dict[str, dict[str, float]], key: str, is_positive: bool, weight: float) -> None:
+        norm = (key or "").strip().lower()
+        if not norm:
+            return
+        if norm not in stats:
+            stats[norm] = {"positive": 0.0, "total": 0.0}
+        stats[norm]["total"] += weight
+        if is_positive:
+            stats[norm]["positive"] += weight
+
     for row in rows:
-        topics: list[str] = json.loads(row["topics"] or "[]")
         is_positive = bool(row["is_relevant"])
-        for topic in topics:
-            if topic not in stats:
-                stats[topic] = {"positive": 0, "total": 0}
-            stats[topic]["total"] += 1
-            if is_positive:
-                stats[topic]["positive"] += 1
-    return stats
+        weight = _weight(row["swiped_at"])
+
+        for topic in json.loads(row["topics"] or "[]"):
+            _add(topic_stats, topic, is_positive, weight)
+
+        _add(source_stats, row["source"] or "", is_positive, weight)
+        _add(category_stats, row["category"] or "", is_positive, weight)
+        _add(category_stats, row["category_secondary"] or "", is_positive, weight)
+
+    return topic_stats, source_stats, category_stats
 
 
 def update_article_enrichment(
@@ -668,7 +703,7 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
             conn.close()
 
 
-def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disliked_topics: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list[sqlite3.Row]:
+def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list[sqlite3.Row]:
     conn = _conn()
     try:
         params: list = []
@@ -677,16 +712,6 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
             placeholders = ",".join("?" * len(region_filters))
             where_region = f"AND a.region IN ({placeholders})"
             params.extend(region_filters)
-
-        where_dislikes = ""
-        if disliked_topics:
-            dp = ",".join("?" * len(disliked_topics))
-            where_dislikes = f"""
-              AND NOT EXISTS (
-                  SELECT 1 FROM json_each(a.topics)
-                  WHERE json_each.value IN ({dp})
-              )"""
-            params.extend(disliked_topics)
 
         where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
 
@@ -720,7 +745,6 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, disli
               AND (a.published_at IS NULL
                    OR datetime(a.published_at) >= datetime('now', '-48 hours'))
               {where_region}
-              {where_dislikes}
               {where_paywall}
               {where_sources}
             ORDER BY a.score DESC, datetime(a.published_at) DESC
@@ -761,6 +785,7 @@ def get_swipe_history(limit: int = 100) -> list[sqlite3.Row]:
 
 def list_articles(
     limit: int = 300,
+    offset: int = 0,
     region_filters: list[str] | None = None,
     hide_paywall: bool = False,
     excluded_sources: list[str] | None = None,
@@ -784,7 +809,7 @@ def list_articles(
             where_sources = f"AND a.source NOT IN ({sp})"
             params.extend(excluded_sources)
 
-        params.append(limit)
+        params.extend([limit, offset])
 
         return conn.execute(
             f"""
@@ -804,10 +829,59 @@ def list_articles(
               {where_paywall}
               {where_sources}
             ORDER BY datetime(a.published_at) DESC, a.id DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
             params,
         ).fetchall()
+    finally:
+        conn.close()
+
+
+def count_articles(
+    region_filters: list[str] | None = None,
+    hide_paywall: bool = False,
+    excluded_sources: list[str] | None = None,
+) -> dict[str, int]:
+    """Return aggregate counts for the articles stat panel."""
+    conn = _conn()
+    try:
+        params: list = []
+
+        where_region = ""
+        if region_filters:
+            placeholders = ",".join("?" * len(region_filters))
+            where_region = f"AND a.region IN ({placeholders})"
+            params.extend(region_filters)
+
+        where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
+
+        where_sources = ""
+        if excluded_sources:
+            sp = ",".join("?" * len(excluded_sources))
+            where_sources = f"AND a.source NOT IN ({sp})"
+            params.extend(excluded_sources)
+
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN a.region = 'suomi'   THEN 1 ELSE 0 END) AS suomi,
+                SUM(CASE WHEN a.region = 'maailma' THEN 1 ELSE 0 END) AS maailma,
+                SUM(CASE WHEN a.is_paywall = 1     THEN 1 ELSE 0 END) AS paywall
+            FROM articles a
+            WHERE 1=1
+              {where_region}
+              {where_paywall}
+              {where_sources}
+            """,
+            params,
+        ).fetchone()
+        return {
+            "total": row["total"] or 0,
+            "suomi": row["suomi"] or 0,
+            "maailma": row["maailma"] or 0,
+            "paywall": row["paywall"] or 0,
+        }
     finally:
         conn.close()
 

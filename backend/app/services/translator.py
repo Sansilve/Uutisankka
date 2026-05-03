@@ -179,9 +179,19 @@ def translate_and_summarize(
     except LLMUnavailable as exc:
         log.warning("translate_and_summarize: all LLM providers failed – %s", exc)
 
-    # Deterministic fallback produces generic bullets rather than returning empty.
-    from .summarizer import _deterministic_summarize
-    return title, _deterministic_summarize(title, content)
+    # Deterministic fallback — produce minimal Finnish-format bullets.
+    # Do NOT feed raw English sentences through _deterministic_summarize:
+    # that produces English content with Finnish labels, which is confusing.
+    from .summarizer import _extract_entities, _split_sentences
+    entities = _extract_entities(f"{title}. {content[:500]}")
+    entities_line = ", ".join(entities) if entities else None
+    heuristic_bullets: list[str] = [f"Mitä tapahtui: {title}"]
+    heuristic_bullets.append(
+        "Miksi tärkeää: Tiivistelmä ei saatavilla – lue koko artikkeli englanniksi."
+    )
+    if entities_line:
+        heuristic_bullets.append(f"Osapuolet: {entities_line}.")
+    return title, {"bullets": heuristic_bullets, "source": "heuristic"}
 
 
 _TITLE_ONLY_PROMPT = (

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Query
 
 from ..config import SCORING_VERSION
 from ..database import (
+    count_articles,
     get_preferences,
     get_swipe_history,
     list_articles,
@@ -47,15 +48,28 @@ def get_history(limit: int = Query(default=100, ge=1, le=500)) -> HistoryRespons
     return HistoryResponse(total=len(items), items=items)
 
 
+@router.get("/articles/stats")
+def get_articles_stats() -> dict:
+    """Return real aggregate counts for the stat panel (total, by region, paywall)."""
+    prefs = get_preferences()
+    return count_articles(
+        region_filters=_scope_to_regions(prefs),
+        hide_paywall=False,
+        excluded_sources=prefs.get("excluded_sources") or None,
+    )
+
+
 @router.get("/articles", response_model=AllNewsResponse)
 def get_all_articles(
-    limit: int = Query(default=300, ge=1, le=1000),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     include_paywall: bool = Query(default=False),
 ) -> AllNewsResponse:
     """Development endpoint: browse all latest articles."""
     prefs = get_preferences()
     rows = list_articles(
         limit=limit,
+        offset=offset,
         region_filters=_scope_to_regions(prefs),
         hide_paywall=False if include_paywall else prefs.get("hide_paywall", True),
         excluded_sources=prefs.get("excluded_sources") or None,
