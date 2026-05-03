@@ -71,7 +71,8 @@ def _get_primary() -> OpenAI | None:
         return None
     global _primary
     if _primary is None:
-        _primary = OpenAI(api_key=OPENAI_API_KEY)
+        # Fail fast on 429/5xx so we can switch provider instead of sleeping.
+        _primary = OpenAI(api_key=OPENAI_API_KEY, max_retries=0)
     return _primary
 
 
@@ -80,9 +81,11 @@ def _get_fallback() -> OpenAI | None:
         return None
     global _fallback
     if _fallback is None:
+        # Fail fast on 429/5xx so rotation can continue immediately.
         _fallback = OpenAI(
             api_key=FALLBACK_LLM_API_KEY,
             base_url=FALLBACK_LLM_BASE_URL,
+            max_retries=0,
         )
     return _fallback
 
