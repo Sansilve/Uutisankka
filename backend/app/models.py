@@ -51,6 +51,8 @@ class ArticleBrief(BaseModel):
     summary: SummaryPayload
     score_breakdown: ScoreBreakdownPayload
     is_paywall: bool = False
+    category: str | None = None
+    category_secondary: str | None = None
 
 
 class IngestResponse(BaseModel):

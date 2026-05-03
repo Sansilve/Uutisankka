@@ -32,6 +32,7 @@ from ..database import (
 from .scoring import score_article
 from .summarizer import _deterministic_summarize, summarize_article
 from .translator import is_english_url, translate_and_summarize, translate_title
+from .classifier import classify_article
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -251,9 +252,21 @@ def enrich_unprocessed_articles() -> int:
 
         feedback_score = get_article_feedback_score(row["id"])
         total_score = round(base_score + feedback_score, 2)
+
+        # LLM category classification — runs only when LLM is routed (score above threshold)
+        classification = classify_article(
+            title=finnish_title or row["title"],
+            content=content,
+            source=source,
+            url=url,
+        ) if not below_threshold else None
+
         update_article_enrichment(
             row["id"], base_score, total_score, topics, summary,
-            {"items": breakdown_items}, translated_title=finnish_title,
+            {"items": breakdown_items},
+            translated_title=finnish_title,
+            category=classification.primary if classification else None,
+            category_secondary=classification.secondary if classification else None,
         )
         count += 1
 

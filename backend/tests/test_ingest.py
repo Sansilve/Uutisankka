@@ -40,7 +40,7 @@ def test_below_threshold_uses_deterministic_without_llm(monkeypatch):
         calls["deterministic"] += 1
         return {"bullets": ["fallback"], "source": "heuristic"}
 
-    def fake_update(article_id, base_score, total_score, topics, summary, breakdown, translated_title=None):
+    def fake_update(article_id, base_score, total_score, topics, summary, breakdown, translated_title=None, **kwargs):
         calls["updated"].append(
             {
                 "article_id": article_id,
@@ -54,6 +54,7 @@ def test_below_threshold_uses_deterministic_without_llm(monkeypatch):
     monkeypatch.setattr(ingest, "summarize_article", fake_summarize)
     monkeypatch.setattr(ingest, "_deterministic_summarize", fake_deterministic)
     monkeypatch.setattr(ingest, "update_article_enrichment", fake_update)
+    monkeypatch.setattr(ingest, "classify_article", lambda *a, **kw: None)
 
     result = ingest.enrich_unprocessed_articles()
 
@@ -99,7 +100,7 @@ def test_above_threshold_english_routes_to_translation_llm(monkeypatch):
         calls["deterministic"] += 1
         return {"bullets": ["fallback"], "source": "heuristic"}
 
-    def fake_update(article_id, base_score, total_score, topics, summary, breakdown, translated_title=None):
+    def fake_update(article_id, base_score, total_score, topics, summary, breakdown, translated_title=None, **kwargs):
         calls["updated"].append(
             {
                 "article_id": article_id,
@@ -113,6 +114,7 @@ def test_above_threshold_english_routes_to_translation_llm(monkeypatch):
     monkeypatch.setattr(ingest, "summarize_article", fake_summarize)
     monkeypatch.setattr(ingest, "_deterministic_summarize", fake_deterministic)
     monkeypatch.setattr(ingest, "update_article_enrichment", fake_update)
+    monkeypatch.setattr(ingest, "classify_article", lambda *a, **kw: None)
 
     result = ingest.enrich_unprocessed_articles()
 
@@ -144,6 +146,8 @@ def _patch_common(monkeypatch, row, calls):
     monkeypatch.setattr(ingest, "_deterministic_summarize",
                         lambda *a, **kw: {"bullets": [], "source": "heuristic"})
     monkeypatch.setattr(ingest, "update_article_enrichment", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest, "classify_article", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest, "get_topic_swipe_stats", lambda: {})
 
 
 def test_low_tier_short_content_skips_llm(monkeypatch):

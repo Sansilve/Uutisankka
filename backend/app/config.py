@@ -202,6 +202,21 @@ _LANG_NAMES: dict[str, str] = {
 }
 TRANSLATION_TARGET_LANG_NAME: str = _LANG_NAMES.get(TRANSLATION_TARGET_LANG, TRANSLATION_TARGET_LANG)
 
+# ---------------------------------------------------------------------------
+# Article category classifier (LLM-based)
+# ---------------------------------------------------------------------------
+# Minimum confidence required to keep the primary category.  Below this the
+# article is stored as uncategorised (category=NULL).
+CLASSIFIER_PRIMARY_MIN_CONFIDENCE: float = float(
+    os.getenv("CLASSIFIER_PRIMARY_MIN_CONFIDENCE", "0.6")
+)
+
+# Minimum confidence required to keep the secondary category.  Below this the
+# secondary is dropped but the primary is kept if it passed its own threshold.
+CLASSIFIER_SECONDARY_MIN_CONFIDENCE: float = float(
+    os.getenv("CLASSIFIER_SECONDARY_MIN_CONFIDENCE", "0.5")
+)
+
 # Adaptive scoring feature flag.
 # When enabled, topic weights are adjusted based on swipe history.
 ADAPTIVE_SCORING_ENABLED: bool = os.getenv("ADAPTIVE_SCORING_ENABLED", "false").lower() == "true"
