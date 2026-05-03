@@ -154,6 +154,8 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
 
     Tries the OpenAI LLM first; falls back to the deterministic heuristic
     summariser when the API key is absent or the API call fails.
+    
+    Validates LLM output: rejects summaries with <2 bullets (triggers fallback).
     """
     assessment = assess_paywall(title=title, content=content, source=source)
 
@@ -168,6 +170,14 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
         }
 
     result = _llm_summarize(title, content)
+    
+    # Validation gate: LLM output must have at least 2 bullets
+    if result is not None:
+        bullets = result.get("bullets", [])
+        if len(bullets) < 2:
+            log.debug("summarize: LLM output rejected (only %d bullets), using fallback", len(bullets))
+            result = None
+    
     if result is not None:
         result["paywall_status"] = assessment.status
         result["paywall_score"] = assessment.score
