@@ -10,12 +10,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import { useState } from 'react'
 import ArticleCard from './src/components/ArticleCard'
 import AllNewsScreen from './src/components/AllNewsScreen'
 import HistoryScreen from './src/components/HistoryScreen'
 import OnboardingScreen from './src/components/OnboardingScreen'
 import PreferencesPanel from './src/components/PreferencesPanel'
 import SwipeTutorialOverlay from './src/components/SwipeTutorialOverlay'
+import SearchFilterPanel from './src/components/SearchFilterPanel'
 import useAppNavigation from './src/navigation/useAppNavigation'
 import { APP_ROUTES } from './src/navigation/routes'
 import useBriefingState from './src/state/useBriefingState'
@@ -32,12 +34,15 @@ import {
 
 const DAILY_LIMIT = 8
 
-function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews }) {
+function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews, onOpenFilter }) {
   return (
     <View style={styles.masthead}>
       <View style={styles.mastheadTop}>
         <Text style={styles.mastheadName}>🦆 UutisAnkka</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.settingsButton} onPress={onOpenFilter}>
+            <Text style={styles.settingsButtonText}>🔍</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.settingsButton} onPress={onOpenAllNews}>
             <Text style={styles.settingsButtonText}>Kaikki</Text>
           </TouchableOpacity>
@@ -133,6 +138,9 @@ function CompletionScreen({ ratings, onRestart, onShowMore, onOpenSettings, busy
 }
 
 export default function App() {
+  const [showFilter, setShowFilter] = useState(false)
+  const [selectedTopics, setSelectedTopics] = useState([])
+  
   useWindowDimensions()
   const { route, openFeed, openHistory, openAllNews, openSettings } = useAppNavigation()
   const { preferences, applyPreferences } = usePreferencesState()
@@ -310,6 +318,12 @@ export default function App() {
     )
   }
 
+  const handleToggleTopic = (topic) => {
+    setSelectedTopics((prev) =>
+      prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic]
+    )
+  }
+
   if (route === APP_ROUTES.ALL_NEWS) {
     return (
       <SafeAreaView style={styles.root}>
@@ -351,6 +365,7 @@ export default function App() {
         onOpenSettings={openSettings}
         onOpenHistory={openHistory}
         onOpenAllNews={openAllNews}
+        onOpenFilter={() => setShowFilter(true)}
       />
 
       {statusMsg ? (
@@ -358,6 +373,14 @@ export default function App() {
           <Text style={styles.statusText}>{statusMsg}</Text>
         </View>
       ) : null}
+
+      {showFilter && (
+        <SearchFilterPanel
+          selectedTopics={selectedTopics}
+          onToggleTopic={handleToggleTopic}
+          onClose={() => setShowFilter(false)}
+        />
+      )}
 
       {isComplete ? (
         <CompletionScreen
