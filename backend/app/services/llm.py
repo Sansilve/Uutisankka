@@ -38,8 +38,12 @@ from ..config import (
     GEMINI_MODEL,
     LLM_MAX_RPS_FALLBACK,
     LLM_MAX_RPS_GEMINI,
+    LLM_MAX_RPS_OLLAMA,
     LLM_MAX_RPS_OPENAI,
     LLM_MODEL,
+    OLLAMA_BASE_URL,
+    OLLAMA_ENABLED,
+    OLLAMA_MODEL,
     OPENAI_API_KEY,
     PROVIDER_TIMEOUT_SECONDS,
 )
@@ -74,6 +78,7 @@ class LLMProvider(Protocol):
 
 _primary: OpenAI | None = None
 _fallback: OpenAI | None = None
+_ollama: OpenAI | None = None
 _gemini = None
 
 # Serialize LLM traffic and enforce per-provider request spacing.
@@ -112,6 +117,37 @@ def _get_fallback() -> OpenAI | None:
             timeout=PROVIDER_TIMEOUT_SECONDS["fallback"],
         )
     return _fallback
+
+
+def _get_ollama() -> OpenAI | None:
+    """Return an OpenAI-compatible client pointed at local Ollama, or None if unavailable."""
+    if not OLLAMA_ENABLED:
+        return None
+    global _ollama
+    if _ollama is None:
+        try:
+            _ollama = OpenAI(
+                api_key="ollama",  # Ollama ignores the key but client requires non-empty
+                base_url=OLLAMA_BASE_URL,
+                max_retries=0,
+                timeout=PROVIDER_TIMEOUT_SECONDS["ollama"],
+            )
+        except Exception:
+            return None
+    return _ollama
+
+
+def _ollama_is_running() -> bool:
+    """Quick TCP check — avoids sending a full request when Ollama is not started."""
+    import socket
+    try:
+        host = OLLAMA_BASE_URL.split("//")[-1].split("/")[0]
+        host, _, port_str = host.partition(":")
+        port = int(port_str) if port_str else 11434
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
 
 
 def _get_gemini():
@@ -200,10 +236,32 @@ class GeminiProvider:
         return _call_gemini(messages=messages, max_tokens=max_tokens, temperature=temperature)
 
 
+class OllamaProvider:
+    name = "ollama"
+
+    def is_available(self) -> bool:
+        return OLLAMA_ENABLED and _ollama_is_running()
+
+    def chat(self, messages: list[dict], max_tokens: int, temperature: float) -> str:
+        client = _get_ollama()
+        if client is None:
+            raise LLMUnavailable("Ollama client unavailable")
+        return _call_openai_like(
+            client=client,
+            model=OLLAMA_MODEL,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            provider_name=self.name,
+            max_rps=LLM_MAX_RPS_OLLAMA,
+        )
+
+
 _provider_registry: dict[str, LLMProvider] = {
     "openai": OpenAIProvider(),
     "fallback": FallbackOpenAIProvider(),
     "gemini": GeminiProvider(),
+    "ollama": OllamaProvider(),
 }
 
 _metrics_lock = threading.Lock()
@@ -327,6 +385,10 @@ def _throttle(provider: str, max_rps: float) -> None:
 
 def _low_cost_order() -> list[str]:
     available: list[str] = []
+    # Ollama first — free, local, no rate limits
+    ollama_provider = _provider_registry.get("ollama")
+    if ollama_provider is not None and ollama_provider.is_available():
+        available.append("ollama")
     fallback_provider = _provider_registry.get("fallback")
     if fallback_provider is not None and fallback_provider.is_available():
         available.append("fallback")
