@@ -178,3 +178,56 @@ def test_high_tier_short_content_allows_llm(monkeypatch):
     ingest.enrich_unprocessed_articles()
 
     assert calls["llm"], "LLM SHOULD be called for high-tier source regardless of low-tier threshold"
+
+
+def test_ingest_stats_counts_below_threshold_heuristic(monkeypatch):
+    row = _make_row(21, title="Threshold test", url="https://bbc.com/news/21")
+    monkeypatch.setattr(ingest, "TRANSLATION_SCORE_THRESHOLD", 0.5)
+    monkeypatch.setattr(ingest, "get_preferences", lambda: {"interests": [], "disliked_topics": []})
+    monkeypatch.setattr(ingest, "fetch_unenriched", lambda limit=300: [row])
+    monkeypatch.setattr(ingest, "get_article_feedback_score", lambda article_id: 0.0)
+    monkeypatch.setattr(ingest, "get_topic_swipe_stats", lambda: {})
+    monkeypatch.setattr(ingest, "rescore_all", lambda preferences=None: 0)
+    monkeypatch.setattr(
+        ingest,
+        "score_article",
+        lambda **kwargs: (-0.2, ["kansainväliset"], [{"reason": "pre", "points": -0.2}]),
+    )
+    monkeypatch.setattr(ingest, "_deterministic_summarize", lambda *a, **kw: {"bullets": ["x"], "source": "heuristic"})
+    monkeypatch.setattr(ingest, "update_article_enrichment", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest, "classify_article", lambda *a, **kw: None)
+
+    ingest.enrich_unprocessed_articles()
+    stats = ingest.get_last_ingest_stats()
+
+    assert stats["filtered_below_threshold"] == 1
+    assert stats["translated_heuristic"] == 1
+    assert stats["translated_llm"] == 0
+
+
+def test_ingest_stats_reset_between_runs(monkeypatch):
+    row = _make_row(22, title="Reset test", url="https://bbc.com/news/22")
+    monkeypatch.setattr(ingest, "TRANSLATION_SCORE_THRESHOLD", 0.5)
+    monkeypatch.setattr(ingest, "get_preferences", lambda: {"interests": [], "disliked_topics": []})
+    monkeypatch.setattr(ingest, "get_article_feedback_score", lambda article_id: 0.0)
+    monkeypatch.setattr(ingest, "get_topic_swipe_stats", lambda: {})
+    monkeypatch.setattr(ingest, "rescore_all", lambda preferences=None: 0)
+    monkeypatch.setattr(
+        ingest,
+        "score_article",
+        lambda **kwargs: (-0.2, ["kansainväliset"], [{"reason": "pre", "points": -0.2}]),
+    )
+    monkeypatch.setattr(ingest, "_deterministic_summarize", lambda *a, **kw: {"bullets": ["x"], "source": "heuristic"})
+    monkeypatch.setattr(ingest, "update_article_enrichment", lambda *a, **kw: None)
+    monkeypatch.setattr(ingest, "classify_article", lambda *a, **kw: None)
+
+    monkeypatch.setattr(ingest, "fetch_unenriched", lambda limit=300: [row])
+    ingest.enrich_unprocessed_articles()
+    first = ingest.get_last_ingest_stats()
+    assert first["translated_heuristic"] == 1
+
+    monkeypatch.setattr(ingest, "fetch_unenriched", lambda limit=300: [])
+    ingest.enrich_unprocessed_articles()
+    second = ingest.get_last_ingest_stats()
+    assert second["translated_heuristic"] == 0
+    assert second["filtered_below_threshold"] == 0

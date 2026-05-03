@@ -211,3 +211,29 @@ def test_get_admin_llm_stats_schema(client):
         assert "rate_limit_count" in stats
         assert "p50_ms" in stats
         assert "p95_ms" in stats
+
+
+# ---------------------------------------------------------------------------
+# GET /api/admin/ingest-stats
+# ---------------------------------------------------------------------------
+
+
+def test_get_admin_ingest_stats_returns_200(client):
+    r = client.get("/api/admin/ingest-stats")
+    assert r.status_code == 200
+
+
+def test_get_admin_ingest_stats_schema(client):
+    body = client.get("/api/admin/ingest-stats").json()
+    assert isinstance(body, dict)
+    assert "translated_llm" in body
+    assert "translated_heuristic" in body
+    assert "filtered_below_threshold" in body
+    assert "cache_hits" in body
+    assert "paywall_detected" in body
+    assert "scrape_attempted" in body
+    assert "scrape_succeeded" in body
+
+    for key, value in body.items():
+        assert isinstance(key, str)
+        assert isinstance(value, int)

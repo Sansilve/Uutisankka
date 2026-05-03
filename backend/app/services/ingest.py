@@ -3,6 +3,7 @@ import html
 import json
 import logging
 import re
+from threading import Lock
 from datetime import timezone
 from difflib import SequenceMatcher
 from typing import Any
@@ -37,6 +38,33 @@ from .classifier import classify_article
 
 TAG_RE = re.compile(r"<[^>]+>")
 log = logging.getLogger(__name__)
+
+
+_ingest_stats_lock = Lock()
+_DEFAULT_INGEST_STATS: dict[str, int] = {
+    "translated_llm": 0,
+    "translated_heuristic": 0,
+    "filtered_below_threshold": 0,
+    "cache_hits": 0,
+    "paywall_detected": 0,
+    "scrape_attempted": 0,
+    "scrape_succeeded": 0,
+}
+_last_ingest_stats: dict[str, int] = dict(_DEFAULT_INGEST_STATS)
+
+
+def _reset_ingest_stats() -> dict[str, int]:
+    return dict(_DEFAULT_INGEST_STATS)
+
+
+def get_last_ingest_stats() -> dict[str, int]:
+    with _ingest_stats_lock:
+        return dict(_last_ingest_stats)
+
+
+def _summary_source(summary: dict[str, Any]) -> str:
+    src = summary.get("source")
+    return src if isinstance(src, str) else ""
 
 
 def _source_tier(source_domain: str) -> str:
@@ -173,6 +201,7 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
 
 def enrich_unprocessed_articles() -> int:
     """Generate summaries for new articles, then score anything unscored."""
+    stats = _reset_ingest_stats()
     preferences = get_preferences()
     topic_swipe_stats = get_topic_swipe_stats() if ADAPTIVE_SCORING_ENABLED else None
     count = 0
@@ -203,6 +232,7 @@ def enrich_unprocessed_articles() -> int:
                 feedback_score = get_article_feedback_score(row["id"])
                 total_score = round(pre_base_score + feedback_score, 2)
                 summary = _deterministic_summarize(row["title"], content)
+                stats["translated_heuristic"] += 1
                 update_article_enrichment(
                     row["id"], pre_base_score, total_score, pre_topics, summary,
                     {"items": pre_breakdown_items}, translated_title=None,
@@ -228,6 +258,7 @@ def enrich_unprocessed_articles() -> int:
 
         if below_threshold:
             filtered_below_threshold += 1
+            stats["filtered_below_threshold"] += 1
             finnish_title = None
             summary = _deterministic_summarize(row["title"], content)
         else:
@@ -249,6 +280,14 @@ def enrich_unprocessed_articles() -> int:
                 preferences=preferences,
                 topic_swipe_stats=topic_swipe_stats,
             )
+
+        summary_src = _summary_source(summary)
+        if summary_src == "llm":
+            stats["translated_llm"] += 1
+        elif summary_src == "heuristic":
+            stats["translated_heuristic"] += 1
+        elif summary_src == "no_content":
+            stats["paywall_detected"] += 1
 
         feedback_score = get_article_feedback_score(row["id"])
         total_score = round(base_score + feedback_score, 2)
@@ -281,6 +320,11 @@ def enrich_unprocessed_articles() -> int:
         filtered_source_quality,
         TRANSLATION_SCORE_THRESHOLD,
     )
+    log.info("ingest_stats: %s", stats)
+
+    with _ingest_stats_lock:
+        global _last_ingest_stats
+        _last_ingest_stats = dict(stats)
 
     # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
     count += rescore_all(preferences)

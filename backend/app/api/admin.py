@@ -6,7 +6,12 @@ from ..database import (
     get_preferences,
     reset_all_enrichment,
 )
-from ..services.ingest import enrich_unprocessed_articles, rescore_all, rescore_for_topics
+from ..services.ingest import (
+    enrich_unprocessed_articles,
+    get_last_ingest_stats,
+    rescore_all,
+    rescore_for_topics,
+)
 from ..services.llm import get_llm_stats
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -69,3 +74,8 @@ def reenrich_status() -> dict[str, str | int]:
 @router.get("/llm-stats")
 def llm_stats() -> dict[str, dict[str, int | float]]:
     return get_llm_stats()
+
+
+@router.get("/ingest-stats")
+def ingest_stats() -> dict[str, int]:
+    return get_last_ingest_stats()
