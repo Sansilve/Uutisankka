@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import ShareButton from './ShareButton'
 
 // Dark, muted newspaper-style topic colors
 const TOPIC_COLORS = {
@@ -357,9 +358,12 @@ export default function ArticleCard({
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(story.url)}>
-            <Text style={styles.linkText}>Lue alkuperäinen →</Text>
-          </TouchableOpacity>
+          <View style={styles.footerActions}>
+            <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(story.url)}>
+              <Text style={styles.linkText}>Lue alkuperäinen →</Text>
+            </TouchableOpacity>
+            <ShareButton article={story} />
+          </View>
         </Animated.View>
       </View>
 
@@ -690,9 +694,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
   },
-  linkButton: {
-    alignSelf: 'center',
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
     marginTop: 12,
+  },
+  linkButton: {
     borderBottomWidth: 1,
     borderBottomColor: '#FFB700',
     paddingBottom: 1,
