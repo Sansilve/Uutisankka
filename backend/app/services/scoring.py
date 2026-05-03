@@ -12,6 +12,7 @@ from ..config import (
     CLICKBAIT_PATTERNS,
     LOW_SIGNAL_PATTERNS,
     MAJOR_SOURCES,
+    SCORING_VERSION,
     TOPIC_WEIGHTS,
 )
 
@@ -145,6 +146,11 @@ def _recency_boost(published_at: str | None) -> float:
     return max(0.0, 2.0 - math.log1p(age_hours))
 
 
+def _adaptive_enabled() -> bool:
+    """Adaptive adjustments are active only in v2 and behind feature flag."""
+    return SCORING_VERSION == "v2" and ADAPTIVE_SCORING_ENABLED
+
+
 def score_article(
     title: str,
     content: str,
@@ -171,7 +177,7 @@ def score_article(
 
     # Adaptive topic weight adjustment from swipe history (S4).
     # Applied only when the feature flag is on and stats are supplied.
-    if ADAPTIVE_SCORING_ENABLED and topic_swipe_stats:
+    if _adaptive_enabled() and topic_swipe_stats:
         for topic in topics:
             stats = topic_swipe_stats.get(topic)
             if not stats or stats["total"] < ADAPTIVE_MIN_SWIPES:

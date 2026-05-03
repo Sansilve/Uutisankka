@@ -190,6 +190,22 @@ def test_get_history_contains_feedback_swipes(client):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/metrics
+# ---------------------------------------------------------------------------
+
+
+def test_get_metrics_returns_200(client):
+    r = client.get("/api/metrics")
+    assert r.status_code == 200
+
+
+def test_get_metrics_contains_scoring_version(client):
+    body = client.get("/api/metrics").json()
+    assert "scoring_version" in body
+    assert body["scoring_version"] in {"v1", "v2"}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/admin/llm-stats
 # ---------------------------------------------------------------------------
 

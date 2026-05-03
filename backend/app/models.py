@@ -88,6 +88,7 @@ class MetricsResponse(BaseModel):
     top_limit: int
     total_feedback_votes: int
     positive_feedback_ratio: float | None
+    scoring_version: str
 
 
 class SwipeHistoryItem(BaseModel):

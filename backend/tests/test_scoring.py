@@ -238,6 +238,7 @@ def test_quality_penalty_category_is_quality():
 def test_adaptive_disabled_identical_to_baseline(monkeypatch):
     """When ADAPTIVE_SCORING_ENABLED is False, scores must be identical regardless of stats."""
     import app.services.scoring as scoring_mod
+    monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", False)
     stats = {"teknologia": {"positive": 9, "total": 10}}
     score_no_stats, _, _ = _score(
@@ -253,6 +254,7 @@ def test_adaptive_disabled_identical_to_baseline(monkeypatch):
 def test_adaptive_enabled_high_positivity_boosts_score(monkeypatch):
     """80% positive swipes on teknologia → adjusted weight is higher than baseline."""
     import app.services.scoring as scoring_mod
+    monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
     stats = {"teknologia": {"positive": 8, "total": 10}}  # 80% positive
@@ -270,6 +272,7 @@ def test_adaptive_enabled_high_positivity_boosts_score(monkeypatch):
 def test_adaptive_enabled_low_positivity_lowers_score(monkeypatch):
     """20% positive swipes on teknologia → score is lower than baseline."""
     import app.services.scoring as scoring_mod
+    monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
     stats = {"teknologia": {"positive": 2, "total": 10}}  # 20% positive
@@ -286,6 +289,7 @@ def test_adaptive_enabled_low_positivity_lowers_score(monkeypatch):
 def test_adaptive_insufficient_swipes_uses_baseline(monkeypatch):
     """Below ADAPTIVE_MIN_SWIPES → no adjustment applied."""
     import app.services.scoring as scoring_mod
+    monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
     monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
     stats = {"teknologia": {"positive": 4, "total": 4}}  # only 4 swipes, threshold=5
@@ -297,3 +301,37 @@ def test_adaptive_insufficient_swipes_uses_baseline(monkeypatch):
     )
     assert score_adaptive == score_baseline
     assert not any("Adaptive weight" in b["reason"] for b in breakdown)
+
+
+@freeze_time(FROZEN_NOW)
+def test_scoring_version_v1_disables_adaptive_even_if_flag_on(monkeypatch):
+    import app.services.scoring as scoring_mod
+
+    monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v1")
+    monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
+    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
+
+    stats = {"teknologia": {"positive": 9, "total": 10}}
+    score_baseline, _, _ = _score(title="AI chip machine learning", published_at=_ts(2))
+    score_with_stats, _, breakdown = score_article(
+        "AI chip machine learning", "", "x.fi", _ts(2), {}, topic_swipe_stats=stats
+    )
+    assert score_with_stats == score_baseline
+    assert not any("Adaptive weight" in b["reason"] for b in breakdown)
+
+
+@freeze_time(FROZEN_NOW)
+def test_scoring_version_v2_enables_adaptive_when_flag_on(monkeypatch):
+    import app.services.scoring as scoring_mod
+
+    monkeypatch.setattr(scoring_mod, "SCORING_VERSION", "v2")
+    monkeypatch.setattr(scoring_mod, "ADAPTIVE_SCORING_ENABLED", True)
+    monkeypatch.setattr(scoring_mod, "ADAPTIVE_MIN_SWIPES", 5)
+
+    stats = {"teknologia": {"positive": 9, "total": 10}}
+    score_baseline, _, _ = _score(title="AI chip machine learning", published_at=_ts(2))
+    score_with_stats, _, breakdown = score_article(
+        "AI chip machine learning", "", "x.fi", _ts(2), {}, topic_swipe_stats=stats
+    )
+    assert score_with_stats > score_baseline
+    assert any("Adaptive weight" in b["reason"] for b in breakdown)

@@ -227,6 +227,13 @@ CLASSIFIER_TONE_MIN_CONFIDENCE: float = float(
 # When enabled, topic weights are adjusted based on swipe history.
 ADAPTIVE_SCORING_ENABLED: bool = os.getenv("ADAPTIVE_SCORING_ENABLED", "false").lower() == "true"
 
+# Scoring logic version gate.
+# v1 = heuristic baseline (no adaptive topic weighting)
+# v2 = baseline + adaptive topic weighting from swipe history
+SCORING_VERSION: str = os.getenv("SCORING_VERSION", "v1").strip().lower()
+if SCORING_VERSION not in {"v1", "v2"}:
+    SCORING_VERSION = "v1"
+
 # Minimum swipe count per topic before adaptive adjustment kicks in.
 ADAPTIVE_MIN_SWIPES: int = int(os.getenv("ADAPTIVE_MIN_SWIPES", "5"))
 
