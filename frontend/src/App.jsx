@@ -12,6 +12,8 @@ import {
   triggerReenrich,
   updatePreferences,
 } from './api'
+import ToneDashboard from './components/ToneDashboard'
+import ObservabilityPanel from './components/ObservabilityPanel'
 import './App.css'
 
 // ── Topic & source config (mirrored from mobile) ──────────────────────────────
@@ -731,6 +733,7 @@ export default function App() {
           { key: 'all', label: '📋 Kaikki' },
           { key: 'history', label: '🕐 Historia' },
           { key: 'prefs', label: '⚙️ Asetukset' },
+          { key: 'admin', label: '🔧 Admin' },
         ].map(({ key, label }) => (
           <button key={key} className={`tab${activeTab === key ? ' tab--active' : ''}`} onClick={() => setActiveTab(key)}>
             {label}
@@ -776,6 +779,14 @@ export default function App() {
         />
       )}
       {activeTab === 'prefs' && !prefs && <p className="empty">Ladataan asetuksia...</p>}
+
+      {activeTab === 'admin' && (
+        <section style={{ padding: '20px' }}>
+          <h2>📊 Admin Dashboards</h2>
+          <ToneDashboard metrics={metrics} />
+          <ObservabilityPanel metrics={metrics} />
+        </section>
+      )}
     </div>
   )
 }
