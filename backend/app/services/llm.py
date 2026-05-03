@@ -353,14 +353,37 @@ def _call_openai_like(
     provider_name: str,
     max_rps: float,
 ) -> str:
-    _throttle(provider_name, max_rps)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return (resp.choices[0].message.content or "").strip()
+    """Call OpenAI-compatible API with exponential backoff on 429 rate limits."""
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        _throttle(provider_name, max_rps)
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            # Handle 429 (rate limit) with exponential backoff
+            error_str = str(e).lower()
+            if "429" in error_str or "rate limit" in error_str:
+                if attempt < max_retries:
+                    # Exponential backoff: 1s, 2s, 4s
+                    wait_time = 2 ** attempt
+                    log.warning("provider %s rate limit (429): retrying after %ds (attempt %d/%d)", 
+                               provider_name, wait_time, attempt + 1, max_retries)
+                    _record_metric(provider_name, "rate_limit_count", 1)
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Max retries exhausted
+                    log.error("provider %s rate limit (429): max retries exhausted", provider_name)
+                    _record_metric(provider_name, "rate_limit_count", 1)
+                    raise LLMUnavailable(f"Rate limit from {provider_name} after {max_retries} retries")
+            # Non-429 error: raise immediately
+            raise
 
 
 def _call_gemini(
