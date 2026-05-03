@@ -67,12 +67,13 @@ def test_malformed_output_without_headline_prefix_keeps_original_title(monkeypat
 
 
 def test_empty_bullets_falls_back_to_heuristic(monkeypatch):
-    _patch_deterministic(monkeypatch)
     _patch_llm(monkeypatch, ["HEADLINE: Uutisotsikko suomeksi"])
     title, summary = translator.translate_and_summarize(_TITLE, _CONTENT)
     assert title == _TITLE
     assert summary["source"] == "heuristic"
-    assert summary["bullets"] == ["fallback bullet"]
+    # New fallback: minimal Finnish bullets using the English title, no raw English sentences
+    assert any("Mitä tapahtui" in b for b in summary["bullets"])
+    assert any("Tiivistelmä ei saatavilla" in b for b in summary["bullets"])
 
 
 def test_title_echo_is_rejected_and_falls_back(monkeypatch):

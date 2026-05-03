@@ -49,6 +49,26 @@ TÄRKEÄÄ:
 """
 
 
+def _dedup_bullets(bullets: list[str]) -> list[str]:
+    """Remove bullets whose content portion is near-identical to a preceding bullet."""
+    seen_content: list[str] = []
+    result: list[str] = []
+    for bullet in bullets:
+        # Strip known Finnish label prefixes to compare content only
+        content_part = re.sub(
+            r"^(Mitä tapahtui|Miksi tärkeää|Osapuolet|Tausta):\s*",
+            "",
+            bullet,
+            flags=re.IGNORECASE,
+        ).strip().lower()
+        # Reject if content starts with same 60 chars as an already-seen bullet
+        prefix = content_part[:60]
+        if not any(prefix and seen.startswith(prefix) for seen in seen_content):
+            result.append(bullet)
+            seen_content.append(content_part)
+    return result
+
+
 def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
     if not (OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY):
         return None
@@ -76,6 +96,7 @@ def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
             if line.strip()
         ]
         bullets = [b for b in bullets if len(b) > 10]
+        bullets = _dedup_bullets(bullets)
         if bullets:
             return {"bullets": bullets[:5], "source": "llm"}
     except LLMUnavailable:
@@ -116,29 +137,42 @@ def _deterministic_summarize(title: str, content: str) -> dict[str, list[str]]:
         }
 
     lead = sentences[0]
+
+    _IMPACT_TOKENS = [
+        # Finnish
+        "koska", "siksi", "tämän vuoksi", "sen seurauksena", "vaikutus", "vaikuttaa",
+        "riski", "merkittävä", "tärkeä", "seuraus", "johtaa", "uhkaa", "hyöty",
+        "talous", "politiikka", "turvallisuus", "terveys",
+        # English (for English-language content)
+        "because", "impact", "risk", "market", "policy", "economy", "security",
+        "significant", "critical", "affect", "threat", "benefit",
+    ]
+    # Only accept impact_sentence that is genuinely distinct from lead
     impact_sentence = next(
         (
             s
             for s in sentences
-            if any(
-                token in s.lower()
-                for token in ["because", "impact", "risk", "market", "policy", "economy",
-                              "koska", "vaikutus", "riski", "talous", "politiikka"]
-            )
+            if s.strip() != lead.strip()
+            and any(token in s.lower() for token in _IMPACT_TOKENS)
         ),
-        sentences[min(1, len(sentences) - 1)],
+        None,
     )
+    # If no keyword match, use the second sentence — but only if it's different
+    if impact_sentence is None and len(sentences) > 1:
+        candidate = sentences[1]
+        if candidate.strip() != lead.strip():
+            impact_sentence = candidate
 
     entities = _extract_entities(f"{title}. {' '.join(sentences[:4])}")
     entities_line = ", ".join(entities) if entities else "Ei tunnistettu"
 
-    bullets = [
-        f"Mitä tapahtui: {lead}",
-        f"Miksi tärkeää: {impact_sentence}",
-        f"Osapuolet: {entities_line}.",
-    ]
+    bullets = [f"Mitä tapahtui: {lead}"]
+    if impact_sentence:  # Only add Miksi tärkeää when genuinely different from lead
+        bullets.append(f"Miksi tärkeää: {impact_sentence}")
+    bullets.append(f"Osapuolet: {entities_line}.")
 
-    extra = [s for s in sentences[1:5] if s not in {lead, impact_sentence}]
+    seen = {lead, impact_sentence or ""}
+    extra = [s for s in sentences[1:5] if s not in seen]
     for sentence in extra[:2]:
         bullets.append(f"Tausta: {sentence}")
 
