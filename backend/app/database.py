@@ -329,7 +329,8 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
             """
             SELECT id, title, source, published_at, content, url, content_hash
             FROM articles
-            WHERE summary_json IS NULL OR summary_json = '{"bullets": []}'
+            WHERE summary_json IS NULL
+               OR summary_json = '{"bullets": []}'
             ORDER BY created_at DESC
             LIMIT ?
             """,

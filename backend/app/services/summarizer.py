@@ -9,7 +9,7 @@ import logging
 import re
 from collections import Counter
 
-from ..config import OPENAI_API_KEY, FALLBACK_LLM_API_KEY
+from ..config import OPENAI_API_KEY, FALLBACK_LLM_API_KEY, GEMINI_API_KEY
 from .llm import LLMUnavailable, chat_with_fallback
 
 log = logging.getLogger(__name__)
@@ -52,7 +52,13 @@ TÄRKEÄÄ:
 
 
 def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
-    if not OPENAI_API_KEY and not FALLBACK_LLM_API_KEY:
+    if not OPENAI_API_KEY and not FALLBACK_LLM_API_KEY and not GEMINI_API_KEY:
+        return None
+
+    stripped = content.strip()
+    # Prefilter low-signal content before spending LLM tokens.
+    sentence_count = len([s for s in re.split(r"[.!?]+", stripped) if len(s.strip()) > 20])
+    if len(stripped) < 120 or sentence_count <= 1:
         return None
 
     user_text = f"Otsikko: {title}\n\nSisältö: {content[:2500]}"
@@ -63,14 +69,25 @@ def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
 
     try:
         raw = chat_with_fallback(messages, max_tokens=400, temperature=0.3)
-        bullets = [
-            line.lstrip("•*-– ").strip()
-            for line in raw.splitlines()
-            if line.strip()
-        ]
-        bullets = [b for b in bullets if len(b) > 10]
-        if bullets:
+
+        def _parse_bullets(text: str) -> list[str]:
+            parsed = [
+                line.lstrip("•*-– ").strip()
+                for line in text.splitlines()
+                if line.strip()
+            ]
+            return [b for b in parsed if len(b) > 10]
+
+        bullets = _parse_bullets(raw)
+        if len(bullets) >= 3:
             return {"bullets": bullets[:5], "source": "llm"}
+
+        # Premium retry: weak/short output gets one OpenAI-prioritised retry.
+        if OPENAI_API_KEY:
+            retry_raw = chat_with_fallback(messages, max_tokens=450, temperature=0.25, premium=True)
+            retry_bullets = _parse_bullets(retry_raw)
+            if retry_bullets:
+                return {"bullets": retry_bullets[:5], "source": "llm"}
     except LLMUnavailable as exc:
         log.warning("_llm_summarize: all LLM providers failed – %s", exc)
 

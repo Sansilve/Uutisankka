@@ -7,8 +7,9 @@ This avoids two separate API calls (translate + summarize) per article.
 """
 
 import logging
+import re
 
-from ..config import FALLBACK_LLM_API_KEY, OPENAI_API_KEY
+from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
 from .llm import LLMUnavailable, chat_with_fallback
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ ENGLISH_DOMAINS: frozenset[str] = frozenset(
         "theguardian.com",
         "washingtonpost.com",
         "aljazeera.com",
+        "aljazeera.net",
         "reuters.com",
         "reutersagency.com",
         "apnews.com",
@@ -34,6 +36,15 @@ ENGLISH_DOMAINS: frozenset[str] = frozenset(
         "economist.com",
         "politico.com",
         "foreignpolicy.com",
+        "cnn.com",
+        "skynews.com",
+        "sky.com",
+        "dw.com",
+        "euronews.com",
+        "npr.org",
+        "france24.com",
+        "rfi.fr",
+        "finlandtoday.fi",
     ]
 )
 
@@ -44,7 +55,7 @@ def is_english_url(url: str) -> bool:
     return any(domain in url_lower for domain in ENGLISH_DOMAINS)
 
 
-_LLM_AVAILABLE = bool(OPENAI_API_KEY or FALLBACK_LLM_API_KEY)
+_LLM_AVAILABLE = bool(OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +89,12 @@ def translate_and_summarize(
     if not _LLM_AVAILABLE:
         return title, {"bullets": [], "source": "heuristic"}
 
+    stripped = content.strip()
+    sentence_count = len([s for s in re.split(r"[.!?]+", stripped) if len(s.strip()) > 20])
+    if len(stripped) < 120 or sentence_count <= 1:
+        from .summarizer import _deterministic_summarize
+        return title, _deterministic_summarize(title, content)
+
     user_text = f"Otsikko (englanti): {title}\n\nArtikkeli (englanti): {content[:2500]}"
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -101,13 +118,35 @@ def translate_and_summarize(
                 if len(bullet) > 10:
                     bullets.append(bullet)
 
-        if bullets:
+        if len(bullets) >= 3:
             return finnish_title, {"bullets": bullets[:5], "source": "llm"}
 
+        # Premium retry: weak output gets one OpenAI-prioritised retry.
+        if OPENAI_API_KEY:
+            retry_raw = chat_with_fallback(messages, max_tokens=500, temperature=0.25, premium=True)
+            retry_lines = [line.strip() for line in retry_raw.splitlines() if line.strip()]
+            retry_title = finnish_title
+            retry_bullets: list[str] = []
+            for line in retry_lines:
+                if line.upper().startswith("OTSIKKO:"):
+                    extracted = line[len("OTSIKKO:"):].strip()
+                    if extracted:
+                        retry_title = extracted
+                elif line.startswith(("-", "•", "*", "–")):
+                    bullet = line.lstrip("-•*– ").strip()
+                    if len(bullet) > 10:
+                        retry_bullets.append(bullet)
+            if retry_bullets:
+                return retry_title, {"bullets": retry_bullets[:5], "source": "llm"}
+
+        # LLM responded but we couldn't parse bullets — fall back to deterministic
+        log.debug("translate_and_summarize: no bullets parsed from LLM response, using heuristic")
     except LLMUnavailable as exc:
         log.warning("translate_and_summarize: all LLM providers failed – %s", exc)
 
-    return title, {"bullets": [], "source": "heuristic"}
+    # Deterministic fallback produces generic bullets rather than returning empty.
+    from .summarizer import _deterministic_summarize
+    return title, _deterministic_summarize(title, content)
 
 
 _TITLE_ONLY_PROMPT = """\
