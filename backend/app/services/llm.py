@@ -395,16 +395,20 @@ def chat_with_fallback(
     premium: bool = False,
     validator: Callable[[str], tuple[bool, str] | bool] | None = None,
 ) -> str:
-    """Call LLM providers with throttled queueing.
+    """Call LLM providers with throttled queueing and latency-aware skipping.
 
     Default mode (premium=False): actively rotate low-cost providers first
-    (fallback1/gemini), then OpenAI as a final safety net.
+    (fallback/gemini), then OpenAI as a final safety net.
 
     Premium mode (premium=True): OpenAI first, then low-cost providers.
+    
+    Smart skipping: providers with P95 latency > threshold are skipped to avoid cascades.
     
     Raises LLMUnavailable if all providers fail or are unconfigured.
     Returns the raw response text string.
     """
+    from ..config import PROVIDER_P95_SKIP_THRESHOLD_MS
+    
     low_cost = _low_cost_order()
 
     provider_order: list[str]
@@ -417,6 +421,15 @@ def chat_with_fallback(
     for provider_name in provider_order:
         provider = _provider_registry.get(provider_name)
         if provider is None or not provider.is_available():
+            continue
+        
+        # Skip provider if P95 latency is too high
+        stats = get_llm_stats()
+        provider_stats = stats.get(provider_name, {})
+        p95_ms = provider_stats.get("p95_ms", 0.0)
+        if p95_ms > PROVIDER_P95_SKIP_THRESHOLD_MS:
+            log.debug("skip provider %s: P95 latency %.0fms exceeds threshold %.0fms", 
+                     provider_name, p95_ms, PROVIDER_P95_SKIP_THRESHOLD_MS)
             continue
 
         tried_any = True

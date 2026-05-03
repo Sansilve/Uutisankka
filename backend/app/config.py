@@ -48,6 +48,10 @@ PROVIDER_TIMEOUT_SECONDS: dict[str, float] = {
     "gemini": float(os.getenv("PROVIDER_TIMEOUT_GEMINI_SECONDS", "12")),
 }
 
+# Skip provider if P95 latency exceeds this threshold (milliseconds)
+# Skip slow providers to avoid cascade delays
+PROVIDER_P95_SKIP_THRESHOLD_MS: float = float(os.getenv("PROVIDER_P95_SKIP_THRESHOLD_MS", "10000.0"))
+
 # Maps feed URL → region tag: "suomi" | "maailma" | "paikalliset:<city>"
 FEED_REGIONS: dict[str, str] = {
     # Finland national
