@@ -34,6 +34,20 @@ LLM_MAX_RPS_OPENAI: float = float(os.getenv("LLM_MAX_RPS_OPENAI", "1.0"))
 LLM_MAX_RPS_FALLBACK: float = float(os.getenv("LLM_MAX_RPS_FALLBACK", "2.0"))
 LLM_MAX_RPS_GEMINI: float = float(os.getenv("LLM_MAX_RPS_GEMINI", "2.0"))
 
+# Pre-filter gate for LLM translation/summarization in ingest pipeline.
+TRANSLATION_SCORE_THRESHOLD: float = float(os.getenv("TRANSLATION_SCORE_THRESHOLD", "0.0"))
+
+# Timeout budget in seconds per provider call.
+# Override via env vars:
+#   PROVIDER_TIMEOUT_OPENAI_SECONDS
+#   PROVIDER_TIMEOUT_FALLBACK_SECONDS
+#   PROVIDER_TIMEOUT_GEMINI_SECONDS
+PROVIDER_TIMEOUT_SECONDS: dict[str, float] = {
+    "openai": float(os.getenv("PROVIDER_TIMEOUT_OPENAI_SECONDS", "10")),
+    "fallback": float(os.getenv("PROVIDER_TIMEOUT_FALLBACK_SECONDS", "8")),
+    "gemini": float(os.getenv("PROVIDER_TIMEOUT_GEMINI_SECONDS", "12")),
+}
+
 # Maps feed URL → region tag: "suomi" | "maailma" | "paikalliset:<city>"
 FEED_REGIONS: dict[str, str] = {
     # Finland national
@@ -129,3 +143,45 @@ MAJOR_SOURCES = {
     "Reuters",
     "The New York Times",
 }
+
+TOPIC_WEIGHTS: dict[str, float] = {
+    "politiikka": 2.8,
+    "talous": 2.3,
+    "teknologia": 2.4,
+    "urheilu": 1.5,
+    "kulttuuri": 1.2,
+    "terveys": 2.0,
+    "ympäristö": 1.8,
+    "tiede": 1.8,
+    "turvallisuus": 2.6,
+    "koulutus": 1.5,
+    "kansainväliset": 2.5,
+    "viihde": -1.6,
+    "celebrity": -2.5,
+    "rikokset": -0.8,
+    "onnettomuudet": -0.5,
+    "sää": -0.5,
+}
+
+CLICKBAIT_PATTERNS = [
+    r"you won[' ]t believe",
+    r"what happened next",
+    r"shocking",
+    r"this one trick",
+    r"goes viral",
+    r"must see",
+    r"et usko",
+    r"hämmästyttävä",
+]
+
+LOW_SIGNAL_PATTERNS = [
+    r"top\s+\d+",
+    r"list of",
+    r"watch:|video:",
+    r"live updates",
+    r"loto(n|ssa|ssa on|tta)",
+    r"oikea rivi",
+    r"arpajaistulokset",
+]
+
+BREAKING_HINTS = ["breaking", "urgent", "developing", "juuri nyt", "äskettäin", "tärkeää"]

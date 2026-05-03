@@ -10,7 +10,7 @@ import logging
 import re
 
 from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
-from .llm import LLMUnavailable, chat_with_fallback
+from .llm import LLMUnavailable, chat_with_fallback, validate_llm_response
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +102,16 @@ def translate_and_summarize(
     ]
 
     try:
-        raw = chat_with_fallback(messages, max_tokens=450, temperature=0.3)
+        raw = chat_with_fallback(
+            messages,
+            max_tokens=450,
+            temperature=0.3,
+            validator=lambda text: validate_llm_response(
+                text,
+                min_bullets=3,
+                input_text=user_text,
+            ),
+        )
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
 
         finnish_title = title  # fallback
@@ -123,7 +132,17 @@ def translate_and_summarize(
 
         # Premium retry: weak output gets one OpenAI-prioritised retry.
         if OPENAI_API_KEY:
-            retry_raw = chat_with_fallback(messages, max_tokens=500, temperature=0.25, premium=True)
+            retry_raw = chat_with_fallback(
+                messages,
+                max_tokens=500,
+                temperature=0.25,
+                premium=True,
+                validator=lambda text: validate_llm_response(
+                    text,
+                    min_bullets=3,
+                    input_text=user_text,
+                ),
+            )
             retry_lines = [line.strip() for line in retry_raw.splitlines() if line.strip()]
             retry_title = finnish_title
             retry_bullets: list[str] = []
@@ -167,6 +186,11 @@ def translate_title(title: str) -> str | None:
             ],
             max_tokens=80,
             temperature=0.2,
+            validator=lambda text: validate_llm_response(
+                text,
+                min_bullets=0,
+                input_text=title,
+            ),
         )
         # Reject if LLM echoed back English or returned garbage
         if result and result != title and len(result) >= 5:

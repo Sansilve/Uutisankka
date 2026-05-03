@@ -7,6 +7,7 @@ from ..database import (
     reset_all_enrichment,
 )
 from ..services.ingest import enrich_unprocessed_articles, rescore_all, rescore_for_topics
+from ..services.llm import get_llm_stats
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 log = logging.getLogger(__name__)
@@ -63,3 +64,8 @@ def admin_resummarize(background_tasks: BackgroundTasks) -> dict[str, str]:
 @router.get("/reenrich/status")
 def reenrich_status() -> dict[str, str | int]:
     return _reenrich_status
+
+
+@router.get("/llm-stats")
+def llm_stats() -> dict[str, dict[str, int | float]]:
+    return get_llm_stats()

@@ -187,3 +187,27 @@ def test_get_history_contains_feedback_swipes(client):
     body = client.get("/api/history").json()
     swiped_ids = {item["id"] for item in body["items"]}
     assert 999 in swiped_ids
+
+
+# ---------------------------------------------------------------------------
+# GET /api/admin/llm-stats
+# ---------------------------------------------------------------------------
+
+
+def test_get_admin_llm_stats_returns_200(client):
+    r = client.get("/api/admin/llm-stats")
+    assert r.status_code == 200
+
+
+def test_get_admin_llm_stats_schema(client):
+    body = client.get("/api/admin/llm-stats").json()
+    assert isinstance(body, dict)
+    for provider_name, stats in body.items():
+        assert isinstance(provider_name, str)
+        assert isinstance(stats, dict)
+        assert "calls" in stats
+        assert "successes" in stats
+        assert "failures" in stats
+        assert "rate_limit_count" in stats
+        assert "p50_ms" in stats
+        assert "p95_ms" in stats
