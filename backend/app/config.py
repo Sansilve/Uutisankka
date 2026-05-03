@@ -299,3 +299,27 @@ PAYWALL_SCORE_PAYWALLED_THRESHOLD: float = float(
 PAYWALL_SCORE_FREE_THRESHOLD: float = float(
     os.getenv("PAYWALL_SCORE_FREE_THRESHOLD", "0.30")
 )
+
+# Score penalty applied when paywall tri-state detection returns 'uncertain'.
+# The article is still shown (not hidden) but ranked lower.
+# Override via env: UNCERTAIN_PAYWALL_SCORE_PENALTY
+UNCERTAIN_PAYWALL_SCORE_PENALTY: float = float(
+    os.getenv("UNCERTAIN_PAYWALL_SCORE_PENALTY", "-1.5")
+)
+
+# Observability alert thresholds for /api/admin/ingest-stats.
+# An alert fires when the ratio (detected / total_processed) exceeds the threshold.
+# Override via env variables below.
+OBSERVABILITY_PAYWALL_FP_THRESHOLD: float = float(
+    os.getenv("OBSERVABILITY_PAYWALL_FP_THRESHOLD", "0.30")
+)
+OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD: float = float(
+    os.getenv("OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD", "0.50")
+)
+
+# Dwell time thresholds for swipe signal strength weighting.
+# If user stays >= DWELL_STRONG_MS, the swipe counts 1.5x (confirmed reading).
+# If user leaves < DWELL_WEAK_MS, the swipe counts 0.7x (likely accidental).
+# Override via env variables below.
+DWELL_STRONG_MS: int = int(os.getenv("DWELL_STRONG_MS", "8000"))
+DWELL_WEAK_MS: int = int(os.getenv("DWELL_WEAK_MS", "2000"))

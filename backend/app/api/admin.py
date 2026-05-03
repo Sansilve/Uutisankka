@@ -77,5 +77,20 @@ def llm_stats() -> dict[str, dict[str, int | float]]:
 
 
 @router.get("/ingest-stats")
-def ingest_stats() -> dict[str, int]:
-    return get_last_ingest_stats()
+def ingest_stats() -> dict:
+    from ..config import OBSERVABILITY_PAYWALL_FP_THRESHOLD, OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD
+    stats = get_last_ingest_stats()
+    alerts: list[str] = []
+    total = stats.get("translated_llm", 0) + stats.get("translated_heuristic", 0) + stats.get("paywall_detected", 0)
+    if total > 0:
+        paywall_rate = stats.get("paywall_detected", 0) / total
+        if paywall_rate > OBSERVABILITY_PAYWALL_FP_THRESHOLD:
+            alerts.append(f"Paywall false-positive rate high ({paywall_rate:.0%} > {OBSERVABILITY_PAYWALL_FP_THRESHOLD:.0%})")
+            log.warning("ALERT: paywall_false_positive_rate=%.2f exceeds threshold=%.2f", paywall_rate, OBSERVABILITY_PAYWALL_FP_THRESHOLD)
+        llm_total = stats.get("translated_llm", 0) + stats.get("translated_heuristic", 0)
+        if llm_total > 0:
+            fallback_rate = stats.get("translated_heuristic", 0) / llm_total
+            if fallback_rate > OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD:
+                alerts.append(f"Translation heuristic fallback rate high ({fallback_rate:.0%} > {OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD:.0%})")
+                log.warning("ALERT: translation_fallback_rate=%.2f exceeds threshold=%.2f", fallback_rate, OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD)
+    return {**stats, "alerts": alerts}

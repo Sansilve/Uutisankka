@@ -74,6 +74,7 @@ def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingRespons
         region_filters=_scope_to_regions(prefs),
         hide_paywall=prefs.get("hide_paywall", True),
         excluded_sources=prefs.get("excluded_sources") or None,
+        tone_filter=prefs.get("tone_filter", "all"),
     )
     log.info("GET /api/briefing limit=%d → %d stories", limit, len(rows))
     return rows_to_briefing(rows)

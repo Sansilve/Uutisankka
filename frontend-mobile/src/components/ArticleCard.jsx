@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Linking,
@@ -163,6 +163,12 @@ export default function ArticleCard({
   const swipeThreshold = width * 0.24
   const [expanded, setExpanded] = useState(false)
   const pan = useRef(new Animated.ValueXY()).current
+  const cardVisibleAt = useRef(Date.now())
+
+  // Reset dwell timer whenever the story changes (new card shown)
+  useEffect(() => {
+    cardVisibleAt.current = Date.now()
+  }, [story.id])
 
   const rotate = pan.x.interpolate({
     inputRange: [-width, 0, width],
@@ -187,6 +193,7 @@ export default function ArticleCard({
   )
 
   function settleCard(isRelevant) {
+    const dwellMs = Date.now() - cardVisibleAt.current
     const toX = isRelevant ? width * 1.2 : -width * 1.2
     Animated.timing(pan, {
       toValue: { x: toX, y: 0 },
@@ -195,7 +202,7 @@ export default function ArticleCard({
     }).start(() => {
       pan.setValue({ x: 0, y: 0 })
       setExpanded(false)
-      onDecision(isRelevant)
+      onDecision(isRelevant, dwellMs)
     })
   }
 

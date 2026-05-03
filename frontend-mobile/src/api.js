@@ -40,6 +40,29 @@ async function request(path, options = {}) {
   return response.json()
 }
 
+function buildAllArticlesQuery(params = {}) {
+  const query = new URLSearchParams()
+  query.set('limit', String(params.limit ?? 50))
+  query.set('offset', String(params.offset ?? 0))
+  query.set('include_paywall', params.includePaywall ? 'true' : 'false')
+
+  for (const scope of params.scopes || []) query.append('scopes', scope)
+  for (const city of params.localCities || []) query.append('local_cities', city)
+  for (const category of params.categories || []) query.append('categories', category)
+  for (const source of params.sources || []) query.append('sources', source)
+  for (const tone of params.tones || []) query.append('tones', tone)
+
+  return query.toString()
+}
+
+function buildFacetsQuery(params = {}) {
+  const query = new URLSearchParams()
+  query.set('include_paywall', params.includePaywall ? 'true' : 'false')
+  for (const scope of params.scopes || []) query.append('scopes', scope)
+  for (const city of params.localCities || []) query.append('local_cities', city)
+  return query.toString()
+}
+
 export const fetchBriefing = (limit = 10) => request(`/api/briefing?limit=${limit}`)
 export const fetchRandomBriefing = (limit = 10) => request(`/api/briefing/random?limit=${limit}`)
 export const fetchPreferences = () => request('/api/preferences')
@@ -49,8 +72,10 @@ export const sendFeedback = (payload) =>
   request('/api/feedback', { method: 'POST', body: JSON.stringify(payload) })
 export const fetchMetrics = (limit = 10) => request(`/api/metrics?limit=${limit}`)
 export const fetchHistory = (limit = 100) => request(`/api/history?limit=${limit}`)
-export const fetchAllArticles = (limit = 300, includePaywall = false) =>
-  request(`/api/articles?limit=${limit}&include_paywall=${includePaywall ? 'true' : 'false'}`)
+export const fetchAllArticles = (params = {}) =>
+  request(`/api/articles?${buildAllArticlesQuery(params)}`)
+export const fetchAllArticleFacets = (params = {}) =>
+  request(`/api/articles/facets?${buildFacetsQuery(params)}`)
 export const triggerIngest = () => request('/api/ingest', { method: 'POST' })
 export const triggerReenrich = () => request('/api/admin/reenrich', { method: 'POST' })
 export const fetchReenrichStatus = () => request('/api/admin/reenrich/status')

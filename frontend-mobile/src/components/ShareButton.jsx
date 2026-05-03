@@ -1,16 +1,18 @@
-import { Linking, Platform, Share, StyleSheet, TouchableOpacity, View } from 'react-native'
-import { useState } from 'react'
+import { Linking, Modal, Platform, Pressable, Share, StyleSheet, TouchableOpacity, View } from 'react-native'
+import { useRef, useState } from 'react'
 import { Text } from 'react-native'
 
 const SHARE_OPTIONS = [
-  { key: 'clipboard', label: '📋 Kopioi linkki', icon: '📋' },
-  { key: 'share', label: '📤 Jaa', icon: '📤' },
-  { key: 'telegram', label: '💬 Telegram', icon: '💬' },
-  { key: 'email', label: '✉️ Sähköposti', icon: '✉️' },
+  { key: 'clipboard', label: 'Kopioi linkki', icon: '📋' },
+  { key: 'share', label: 'Jaa', icon: '📤' },
+  { key: 'telegram', label: 'Telegram', icon: '💬' },
+  { key: 'email', label: 'Sähköposti', icon: '✉️' },
 ]
 
 export default function ShareButton({ article }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
+  const buttonRef = useRef(null)
 
   const handleCopyLink = () => {
     // Note: Clipboard API would need react-native-clipboard or similar
@@ -69,22 +71,35 @@ export default function ShareButton({ article }) {
     }
   }
 
+  const openMenu = () => {
+    if (buttonRef.current) {
+      buttonRef.current.measureInWindow((x, y, width, height) => {
+        setMenuPos({ top: y + height + 4, right: window?.innerWidth ? window.innerWidth - x - width : 16 })
+        setShowMenu(true)
+      })
+    } else {
+      setShowMenu(true)
+    }
+  }
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
+        ref={buttonRef}
         style={styles.shareButton}
-        onPress={() => setShowMenu(!showMenu)}
+        onPress={openMenu}
       >
         <Text style={styles.shareButtonText}>📤 Jaa</Text>
       </TouchableOpacity>
 
-      {showMenu && (
-        <>
-          <View
-            style={styles.backdrop}
-            onTouchEnd={() => setShowMenu(false)}
-          />
-          <View style={styles.menu}>
+      <Modal
+        visible={showMenu}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowMenu(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setShowMenu(false)}>
+          <Pressable style={[styles.menu, { position: 'absolute', top: menuPos.top, right: menuPos.right }]} onPress={() => {}}>
             {SHARE_OPTIONS.map((option) => (
               <TouchableOpacity
                 key={option.key}
@@ -95,9 +110,9 @@ export default function ShareButton({ article }) {
                 <Text style={styles.menuItemLabel}>{option.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-        </>
-      )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -120,17 +135,10 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9,
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   menu: {
-    position: 'absolute',
-    top: 36,
-    right: 0,
     backgroundColor: '#ffffff',
     borderRadius: 4,
     borderWidth: 1,
@@ -141,7 +149,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
-    zIndex: 10,
   },
   menuItem: {
     flexDirection: 'row',

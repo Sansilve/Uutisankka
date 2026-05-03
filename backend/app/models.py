@@ -11,6 +11,7 @@ class PreferenceProfile(BaseModel):
     local_city: str = ""
     hide_paywall: bool = False
     excluded_sources: List[str] = Field(default_factory=list)
+    tone_filter: str = "all"
 
 
 class PreferenceUpdate(BaseModel):
@@ -20,6 +21,7 @@ class PreferenceUpdate(BaseModel):
     local_city: str = ""
     hide_paywall: bool = False
     excluded_sources: List[str] = Field(default_factory=list)
+    tone_filter: str = "all"
 
 
 class SummaryPayload(BaseModel):
@@ -74,6 +76,7 @@ class BriefingResponse(BaseModel):
 class FeedbackPayload(BaseModel):
     article_id: int
     is_relevant: bool
+    dwell_ms: int | None = None
 
 
 class FeedbackResponse(BaseModel):
@@ -119,6 +122,10 @@ class AllNewsItem(BaseModel):
     topics: List[str]
     summary: SummaryPayload
     is_paywall: bool = False
+    score: float = 0.0
+    category: str | None = None
+    category_secondary: str | None = None
+    tone: str | None = None
 
 
 class AllNewsResponse(BaseModel):
