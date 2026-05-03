@@ -265,3 +265,14 @@ LOW_TIER_MIN_CONTENT_LENGTH: int = int(os.getenv("LOW_TIER_MIN_CONTENT_LENGTH", 
 
 # Minimum content length for all other sources (existing threshold).
 MIN_CONTENT_LENGTH: int = int(os.getenv("MIN_CONTENT_LENGTH", "150"))
+
+# Paywall score thresholds for tri-state classification.
+# score >= PAYWALL_SCORE_PAYWALLED_THRESHOLD -> paywalled
+# score <= PAYWALL_SCORE_FREE_THRESHOLD      -> free
+# otherwise                                  -> uncertain
+PAYWALL_SCORE_PAYWALLED_THRESHOLD: float = float(
+    os.getenv("PAYWALL_SCORE_PAYWALLED_THRESHOLD", "0.70")
+)
+PAYWALL_SCORE_FREE_THRESHOLD: float = float(
+    os.getenv("PAYWALL_SCORE_FREE_THRESHOLD", "0.30")
+)

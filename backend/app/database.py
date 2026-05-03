@@ -496,13 +496,13 @@ def update_article_enrichment(
     tone_confidence: float | None = None,
     tone_reason: str | None = None,
 ) -> None:
-    is_paywall_from_summary = 1 if summary.get("source") == "no_content" else 0
+    status = summary.get("paywall_status")
+    is_paywall_from_summary = 1 if (summary.get("source") == "no_content" or status == "paywalled") else 0
     with _db_lock:
         conn = _conn()
         try:
-            existing = conn.execute("SELECT is_paywall FROM articles WHERE id = ?", (article_id,)).fetchone()
-            existing_paywall = int(existing["is_paywall"]) if existing else 0
-            is_paywall = 1 if (existing_paywall or is_paywall_from_summary) else 0
+            # Recompute from latest summary assessment to avoid sticky false flags.
+            is_paywall = is_paywall_from_summary
             if translated_title:
                 conn.execute(
                     """
