@@ -182,6 +182,7 @@ def score_article(
     category_swipe_stats: dict[str, dict[str, float]] | None = None,
     category: str | None = None,
     category_secondary: str | None = None,
+    paywall_status: str | None = None,
 ) -> tuple[float, list[str], list[dict[str, float | str]]]:
     combined = f"{title} {content}".lower()
     topics = detect_topics(combined)
@@ -293,6 +294,11 @@ def score_article(
     score += recency_points
     if recency_points != 0:
         breakdown.append({"reason": "Recency adjustment", "points": round(recency_points, 2), "category": "freshness"})
+
+    if paywall_status == "uncertain":
+        from ..config import UNCERTAIN_PAYWALL_SCORE_PENALTY
+        score += UNCERTAIN_PAYWALL_SCORE_PENALTY
+        breakdown.append({"reason": "Paywall uncertain", "points": UNCERTAIN_PAYWALL_SCORE_PENALTY, "category": "quality"})
 
     return round(score, 2), topics, breakdown
 

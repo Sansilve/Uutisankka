@@ -71,6 +71,12 @@ const NEWS_SCOPES = [
   { id: 'paikalliset', label: 'Paikalliset' },
 ]
 
+const TONE_OPTIONS = [
+  { id: 'all',             icon: '🌤',  label: 'Kaikki uutiset',       desc: 'Näytä kaikki' },
+  { id: 'neutral_positive', icon: '⛅', label: 'Ei raskaita',           desc: 'Piilota negatiiviset' },
+  { id: 'positive',        icon: '☀️',  label: 'Vain hyvät uutiset',   desc: 'Vain positiiviset' },
+]
+
 export default function PreferencesPanel({ preferences, onSaved }) {
   const { width } = useWindowDimensions()
   const panelWidth = Math.min(width - (width < 520 ? 24 : 40), 760)
@@ -81,6 +87,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
   const [city, setCity]           = useState(preferences.local_city || '')
   const [hidePaywall, setHidePaywall] = useState(preferences.hide_paywall !== false)
   const [excludedSources, setExcludedSources] = useState(new Set(preferences.excluded_sources || []))
+  const [toneFilter, setToneFilter] = useState(preferences.tone_filter || 'all')
   const [saving, setSaving]       = useState(false)
   const [status, setStatus]       = useState('')
   const [unsaved, setUnsaved]     = useState(false)
@@ -171,6 +178,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
         local_city: city,
         hide_paywall: hidePaywall,
         excluded_sources: [...excludedSources],
+        tone_filter: toneFilter,
       })
       setUnsaved(false)
       setStatus('Tallennettu – pisteytetään...')
@@ -264,6 +272,26 @@ export default function PreferencesPanel({ preferences, onSaved }) {
         </View>
 
         {unsaved && <Text style={styles.unsaved}>Tallentamattomat muutokset</Text>}
+
+        <Text style={styles.sectionLabel}>Uutisten tunnelma</Text>
+        <Text style={styles.hint}>Vaikuttaa siihen, minkälaiset uutiset nousevat briefingiin</Text>
+        <View style={styles.toneRow}>
+          {TONE_OPTIONS.map((opt) => {
+            const active = toneFilter === opt.id
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[styles.toneBtn, active && styles.toneBtnActive]}
+                onPress={() => { setToneFilter(opt.id); setUnsaved(true) }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.toneIcon}>{opt.icon}</Text>
+                <Text style={[styles.toneBtnLabel, active && styles.toneBtnLabelActive]}>{opt.label}</Text>
+                <Text style={[styles.toneBtnDesc, active && styles.toneBtnDescActive]}>{opt.desc}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
 
         <Text style={styles.sectionLabel}>Muut asetukset</Text>
         <TouchableOpacity
@@ -375,4 +403,15 @@ const styles = StyleSheet.create({
   saveBtnDisabled: { backgroundColor: '#d1d5db' },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
   status: { marginTop: 10, fontSize: 13, color: '#9ca3af', textAlign: 'center' },
+  toneRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  toneBtn: {
+    flex: 1, borderWidth: 1.5, borderColor: '#d1d5db', borderRadius: 4,
+    paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center',
+  },
+  toneBtnActive: { borderColor: '#1a1a1a', backgroundColor: '#1a1a1a' },
+  toneIcon: { fontSize: 20, marginBottom: 4 },
+  toneBtnLabel: { fontSize: 12, fontWeight: '700', color: '#1a1a1a', textAlign: 'center' },
+  toneBtnLabelActive: { color: '#fff' },
+  toneBtnDesc: { fontSize: 10, color: '#9ca3af', textAlign: 'center', marginTop: 2 },
+  toneBtnDescActive: { color: '#d1d5db' },
 })

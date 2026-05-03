@@ -29,7 +29,6 @@ import {
   fetchPreferences,
   fetchRandomBriefing,
   sendFeedback,
-  triggerIngest,
 } from './src/api'
 
 const DAILY_LIMIT = 8
@@ -196,11 +195,11 @@ export default function App() {
     loadData().finally(() => setLoading(false))
   }, [])
 
-  async function handleDecision(isRelevant) {
+  async function handleDecision(isRelevant, dwellMs) {
     if (!activeStory) return
     setBusy(true)
     try {
-      await sendFeedback({ article_id: activeStory.id, is_relevant: isRelevant })
+      await sendFeedback({ article_id: activeStory.id, is_relevant: isRelevant, dwell_ms: dwellMs ?? null })
       addRating(activeStory.id, isRelevant, isShowingSurprise)
       setStatusMsg(isRelevant ? 'Merkitty kiinnostavaksi' : 'Ohitettu')
       if (isShowingSurprise) {
@@ -236,20 +235,13 @@ export default function App() {
   async function handleShowMore() {
     setBusy(true)
     try {
-      const ingest = await triggerIngest()
-      if (ingest.inserted > 0) {
-        setStatusMsg(`Haettu ${ingest.inserted} uutta uutista`)
-        await loadData()
-      } else {
-        const [briefingData, prefData, metricsData] = await Promise.all([
-          fetchRandomBriefing(DAILY_LIMIT),
-          fetchPreferences(),
-          fetchMetrics(DAILY_LIMIT),
-        ])
-        applyBriefingData(briefingData, metricsData)
-        applyPreferences(prefData)
-        setStatusMsg('Ei uusia uutisia juuri nyt - näytetään toinen kierros valikoidusta arkistosta.')
-      }
+      const [briefingData, prefData, metricsData] = await Promise.all([
+        fetchRandomBriefing(DAILY_LIMIT),
+        fetchPreferences(),
+        fetchMetrics(DAILY_LIMIT),
+      ])
+      applyBriefingData(briefingData, metricsData)
+      applyPreferences(prefData)
       openFeed()
     } catch (error) {
       setErrorStatus(error)

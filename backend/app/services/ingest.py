@@ -294,6 +294,7 @@ def enrich_unprocessed_articles() -> int:
 
             # Score using translated title when available for better Finnish keyword matching.
             score_title = finnish_title or row["title"]
+            paywall_status = summary.get("paywall_status")
             base_score, topics, breakdown_items = score_article(
                 title=score_title,
                 content=content,
@@ -305,6 +306,7 @@ def enrich_unprocessed_articles() -> int:
                 category_swipe_stats=category_swipe_stats,
                 category=_row_value(row, "category"),
                 category_secondary=_row_value(row, "category_secondary"),
+                paywall_status=paywall_status,
             )
 
         summary_src = _summary_source(summary)
@@ -337,6 +339,7 @@ def enrich_unprocessed_articles() -> int:
                 category_swipe_stats=category_swipe_stats,
                 category=classification.primary,
                 category_secondary=classification.secondary,
+                paywall_status=paywall_status,
             )
 
         total_score = round(base_score + feedback_score, 2)

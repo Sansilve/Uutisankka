@@ -1,6 +1,7 @@
 import json
 import math
 import sqlite3
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
@@ -13,8 +14,10 @@ _db_lock = Lock()
 
 def _conn() -> sqlite3.Connection:
     db_path = Path(DB_PATH)
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -94,6 +97,8 @@ def init_db() -> None:
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 1")
             _ensure_column(conn, "user_preferences", "excluded_sources", "TEXT NOT NULL DEFAULT '[]'")
+            _ensure_column(conn, "user_preferences", "tone_filter", "TEXT NOT NULL DEFAULT 'all'")
+            _ensure_column(conn, "swipe_history", "dwell_ms", "INTEGER DEFAULT NULL")
             conn.commit()
         finally:
             conn.close()
@@ -112,6 +117,7 @@ def upsert_preferences(
     local_city: str = "",
     hide_paywall: bool = True,
     excluded_sources: list[str] | None = None,
+    tone_filter: str = "all",
     only_if_missing: bool = False,
 ) -> None:
     with _db_lock:
@@ -125,23 +131,25 @@ def upsert_preferences(
 
             scope = news_scope if news_scope is not None else ["suomi", "maailma"]
             sources = excluded_sources if excluded_sources is not None else []
+            valid_tone_filters = {"all", "positive", "neutral_positive", "neutral"}
+            tf = tone_filter if tone_filter in valid_tone_filters else "all"
             timestamp = datetime.utcnow().isoformat()
             if existing:
                 conn.execute(
                     """
                     UPDATE user_preferences
-                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, excluded_sources = ?, updated_at = ?
+                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, excluded_sources = ?, tone_filter = ?, updated_at = ?
                     WHERE user_id = 1
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), tf, timestamp),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, updated_at)
-                    VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, tone_filter, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), tf, timestamp),
                 )
             conn.commit()
         finally:
@@ -152,7 +160,7 @@ def get_preferences() -> dict:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources FROM user_preferences WHERE user_id = 1"
+            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, tone_filter FROM user_preferences WHERE user_id = 1"
         ).fetchone()
         if not row:
             return {
@@ -162,6 +170,7 @@ def get_preferences() -> dict:
                 "local_city": "",
                 "hide_paywall": True,
                 "excluded_sources": [],
+                "tone_filter": "all",
             }
         return {
             "interests": json.loads(row["interests"]),
@@ -170,6 +179,7 @@ def get_preferences() -> dict:
             "local_city": row["local_city"] or "",
             "hide_paywall": bool(row["hide_paywall"]),
             "excluded_sources": json.loads(row["excluded_sources"] or '[]'),
+            "tone_filter": row["tone_filter"] or "all",
         }
     finally:
         conn.close()
@@ -468,7 +478,7 @@ def get_affinity_swipe_stats(half_life_days: float = 30.0) -> tuple[
         rows = conn.execute(
             """
             SELECT a.topics, a.source, a.category, a.category_secondary,
-                   s.is_relevant, s.swiped_at
+                   s.is_relevant, s.swiped_at, s.dwell_ms
             FROM swipe_history s
             JOIN articles a ON a.id = s.article_id
             """
@@ -503,9 +513,20 @@ def get_affinity_swipe_stats(half_life_days: float = 30.0) -> tuple[
         if is_positive:
             stats[norm]["positive"] += weight
 
+    def _dwell_multiplier(dwell_ms: int | None) -> float:
+        """Strong signal if user stayed >= DWELL_STRONG_MS; weak if < DWELL_WEAK_MS."""
+        from .config import DWELL_STRONG_MS, DWELL_WEAK_MS
+        if dwell_ms is None:
+            return 1.0
+        if dwell_ms >= DWELL_STRONG_MS:
+            return 1.5
+        if dwell_ms < DWELL_WEAK_MS:
+            return 0.7
+        return 1.0
+
     for row in rows:
         is_positive = bool(row["is_relevant"])
-        weight = _weight(row["swiped_at"])
+        weight = _weight(row["swiped_at"]) * _dwell_multiplier(row["dwell_ms"])
 
         for topic in json.loads(row["topics"] or "[]"):
             _add(topic_stats, topic, is_positive, weight)
@@ -624,7 +645,7 @@ def update_article_score_only(
             conn.close()
 
 
-def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]:
+def apply_feedback(article_id: int, is_relevant: bool, dwell_ms: int | None = None) -> dict[str, float | int]:
     with _db_lock:
         conn = _conn()
         try:
@@ -666,10 +687,10 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
 
             conn.execute(
                 """
-                INSERT INTO swipe_history (article_id, is_relevant, swiped_at)
-                VALUES (?, ?, ?)
+                INSERT INTO swipe_history (article_id, is_relevant, swiped_at, dwell_ms)
+                VALUES (?, ?, ?, ?)
                 """,
-                (article_id, 1 if is_relevant else 0, timestamp),
+                (article_id, 1 if is_relevant else 0, timestamp, dwell_ms),
             )
 
             net_votes = positive - negative
@@ -703,7 +724,7 @@ def apply_feedback(article_id: int, is_relevant: bool) -> dict[str, float | int]
             conn.close()
 
 
-def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None) -> list[sqlite3.Row]:
+def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_paywall: bool = False, excluded_sources: list[str] | None = None, tone_filter: str = "all") -> list[sqlite3.Row]:
     conn = _conn()
     try:
         params: list = []
@@ -721,6 +742,14 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_
             where_sources = f"AND a.source NOT IN ({sp})"
             params.extend(excluded_sources)
 
+        where_tone = ""
+        if tone_filter == "positive":
+            where_tone = "AND (a.tone = 'positive' OR a.tone IS NULL)"
+        elif tone_filter == "neutral_positive":
+            where_tone = "AND (a.tone IS NULL OR a.tone IN ('positive', 'neutral'))"
+        elif tone_filter == "neutral":
+            where_tone = "AND (a.tone = 'neutral' OR a.tone IS NULL)"
+
         params.append(limit)
         return conn.execute(
             f"""
@@ -737,6 +766,11 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_
                 a.summary_json,
                 a.score_breakdown_json,
                 a.is_paywall,
+                a.category,
+                a.category_secondary,
+                a.tone,
+                a.tone_confidence,
+                a.tone_reason,
                 COALESCE(f.positive_count, 0) AS feedback_positive,
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
@@ -747,6 +781,7 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_
               {where_region}
               {where_paywall}
               {where_sources}
+              {where_tone}
             ORDER BY a.score DESC, datetime(a.published_at) DESC
             LIMIT ?
             """,
@@ -783,12 +818,84 @@ def get_swipe_history(limit: int = 100) -> list[sqlite3.Row]:
         conn.close()
 
 
+def _normalize_key(value: str | None) -> str:
+    raw = str(value or "").strip().lower()
+    raw = unicodedata.normalize("NFD", raw)
+    return "".join(ch for ch in raw if unicodedata.category(ch) != "Mn")
+
+
+def _canonical_category(value: str | None) -> str:
+    key = _normalize_key(value)
+    aliases = {
+        "rikokset": "rikos",
+        "rikos": "rikos",
+        "saa": "saa",
+        "ymparisto": "ymparisto",
+        "kansainvaliset": "kansainvaliset",
+    }
+    return aliases.get(key, key)
+
+
+def _categories_from_row(row: sqlite3.Row) -> set[str]:
+    values: list[str] = []
+    values.extend([row["category"], row["category_secondary"]])
+    topics = json.loads(row["topics"] or "[]")
+    if isinstance(topics, list):
+        values.extend(topics)
+    out: set[str] = set()
+    for value in values:
+        key = _canonical_category(value)
+        if key:
+            out.add(key)
+    return out
+
+
+def _build_region_where(
+    scope_filters: list[str] | None = None,
+    local_cities: list[str] | None = None,
+) -> tuple[str, list[str]]:
+    scopes = {_normalize_key(x) for x in (scope_filters or []) if _normalize_key(x)}
+    cities = [_normalize_key(x) for x in (local_cities or []) if _normalize_key(x)]
+
+    if not scopes and not cities:
+        return "", []
+
+    clauses: list[str] = []
+    params: list[str] = []
+
+    if "suomi" in scopes:
+        clauses.append("a.region = 'suomi'")
+    if "maailma" in scopes:
+        clauses.append("a.region = 'maailma'")
+
+    if "paikalliset" in scopes:
+        if cities:
+            placeholders = ",".join("?" * len(cities))
+            clauses.append(f"a.region IN ({placeholders})")
+            params.extend([f"paikalliset:{city}" for city in cities])
+        else:
+            clauses.append("a.region LIKE 'paikalliset:%'")
+    elif cities:
+        placeholders = ",".join("?" * len(cities))
+        clauses.append(f"a.region IN ({placeholders})")
+        params.extend([f"paikalliset:{city}" for city in cities])
+
+    if not clauses:
+        return "AND 1=0", []
+    return f"AND ({' OR '.join(clauses)})", params
+
+
 def list_articles(
     limit: int = 300,
     offset: int = 0,
     region_filters: list[str] | None = None,
     hide_paywall: bool = False,
     excluded_sources: list[str] | None = None,
+    scope_filters: list[str] | None = None,
+    local_cities: list[str] | None = None,
+    source_filters: list[str] | None = None,
+    category_filters: list[str] | None = None,
+    tone_filters: list[str] | None = None,
 ) -> list[sqlite3.Row]:
     """Return latest articles for development browsing (not only swiped items)."""
     conn = _conn()
@@ -796,7 +903,10 @@ def list_articles(
         params: list = []
 
         where_region = ""
-        if region_filters:
+        if scope_filters is not None or local_cities is not None:
+            where_region, region_params = _build_region_where(scope_filters, local_cities)
+            params.extend(region_params)
+        elif region_filters:
             placeholders = ",".join("?" * len(region_filters))
             where_region = f"AND a.region IN ({placeholders})"
             params.extend(region_filters)
@@ -804,35 +914,100 @@ def list_articles(
         where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
 
         where_sources = ""
-        if excluded_sources:
+        if source_filters:
+            sp = ",".join("?" * len(source_filters))
+            where_sources = f"AND a.source IN ({sp})"
+            params.extend(source_filters)
+        elif excluded_sources:
             sp = ",".join("?" * len(excluded_sources))
             where_sources = f"AND a.source NOT IN ({sp})"
             params.extend(excluded_sources)
 
-        params.extend([limit, offset])
+        where_tone = ""
+        normalized_tones = {_normalize_key(x) for x in (tone_filters or []) if _normalize_key(x)}
+        if normalized_tones and "all" not in normalized_tones:
+            expanded_tones: set[str] = set()
+            for tone in normalized_tones:
+                if tone == "neutral_positive":
+                    expanded_tones.update(["neutral", "positive"])
+                elif tone in {"positive", "neutral", "negative"}:
+                    expanded_tones.add(tone)
+            if expanded_tones:
+                placeholders = ",".join("?" * len(expanded_tones))
+                where_tone = f"AND a.tone IN ({placeholders})"
+                params.extend(sorted(expanded_tones))
+            else:
+                where_tone = "AND 1=0"
 
-        return conn.execute(
-            f"""
-            SELECT
-                a.id,
-                a.title,
-                a.source,
-                a.region,
-                a.published_at,
-                a.url,
-                a.topics,
-                a.summary_json,
-                a.is_paywall
-            FROM articles a
-            WHERE 1=1
-              {where_region}
-              {where_paywall}
-              {where_sources}
-            ORDER BY datetime(a.published_at) DESC, a.id DESC
-            LIMIT ? OFFSET ?
-            """,
-            params,
-        ).fetchall()
+        normalized_categories = {
+            _canonical_category(x) for x in (category_filters or []) if _canonical_category(x)
+        }
+
+        if normalized_categories:
+            # Category filtering must be done in Python — fetch all matching rows first
+            rows = conn.execute(
+                f"""
+                SELECT
+                    a.id,
+                    a.title,
+                    a.source,
+                    a.region,
+                    a.published_at,
+                    a.url,
+                    a.topics,
+                    a.summary_json,
+                    a.is_paywall,
+                    a.score,
+                    a.category,
+                    a.category_secondary,
+                    a.tone
+                FROM articles a
+                WHERE 1=1
+                  {where_region}
+                  {where_paywall}
+                  {where_sources}
+                  {where_tone}
+                ORDER BY datetime(a.published_at) DESC, a.id DESC
+                """,
+                params,
+            ).fetchall()
+            rows = [
+                row
+                for row in rows
+                if _categories_from_row(row).intersection(normalized_categories)
+            ]
+            return rows[offset: offset + limit]
+        else:
+            # No Python-side filtering needed — push LIMIT/OFFSET into SQL
+            params_page = params + [limit, offset]
+            rows = conn.execute(
+                f"""
+                SELECT
+                    a.id,
+                    a.title,
+                    a.source,
+                    a.region,
+                    a.published_at,
+                    a.url,
+                    a.topics,
+                    a.summary_json,
+                    a.is_paywall,
+                    a.score,
+                    a.category,
+                    a.category_secondary,
+                    a.tone
+                FROM articles a
+                WHERE 1=1
+                  {where_region}
+                  {where_paywall}
+                  {where_sources}
+                  {where_tone}
+                ORDER BY datetime(a.published_at) DESC, a.id DESC
+                LIMIT ? OFFSET ?
+                """,
+                params_page,
+            ).fetchall()
+            return rows
     finally:
         conn.close()
 
@@ -841,14 +1016,47 @@ def count_articles(
     region_filters: list[str] | None = None,
     hide_paywall: bool = False,
     excluded_sources: list[str] | None = None,
+    scope_filters: list[str] | None = None,
+    local_cities: list[str] | None = None,
+    source_filters: list[str] | None = None,
+    category_filters: list[str] | None = None,
+    tone_filters: list[str] | None = None,
 ) -> dict[str, int]:
     """Return aggregate counts for the articles stat panel."""
+    normalized_categories = {
+        _canonical_category(x) for x in (category_filters or []) if _canonical_category(x)
+    }
+
+    # When category filters are active we still need Python-side filtering, so load all rows
+    if normalized_categories:
+        rows = list_articles(
+            limit=10_000_000,
+            offset=0,
+            region_filters=region_filters,
+            hide_paywall=hide_paywall,
+            excluded_sources=excluded_sources,
+            scope_filters=scope_filters,
+            local_cities=local_cities,
+            source_filters=source_filters,
+            category_filters=category_filters,
+            tone_filters=tone_filters,
+        )
+        total = len(rows)
+        suomi = sum(1 for r in rows if r["region"] == "suomi")
+        maailma = sum(1 for r in rows if r["region"] == "maailma")
+        paywall = sum(1 for r in rows if bool(r["is_paywall"]))
+        return {"total": total, "suomi": suomi, "maailma": maailma, "paywall": paywall}
+
+    # Fast path: use SQL COUNT(*) — no need to load all rows into Python
     conn = _conn()
     try:
         params: list = []
 
         where_region = ""
-        if region_filters:
+        if scope_filters is not None or local_cities is not None:
+            where_region, region_params = _build_region_where(scope_filters, local_cities)
+            params.extend(region_params)
+        elif region_filters:
             placeholders = ",".join("?" * len(region_filters))
             where_region = f"AND a.region IN ({placeholders})"
             params.extend(region_filters)
@@ -856,34 +1064,107 @@ def count_articles(
         where_paywall = "AND a.is_paywall = 0" if hide_paywall else ""
 
         where_sources = ""
-        if excluded_sources:
+        if source_filters:
+            sp = ",".join("?" * len(source_filters))
+            where_sources = f"AND a.source IN ({sp})"
+            params.extend(source_filters)
+        elif excluded_sources:
             sp = ",".join("?" * len(excluded_sources))
             where_sources = f"AND a.source NOT IN ({sp})"
             params.extend(excluded_sources)
+
+        where_tone = ""
+        normalized_tones = {_normalize_key(x) for x in (tone_filters or []) if _normalize_key(x)}
+        if normalized_tones and "all" not in normalized_tones:
+            expanded_tones: set[str] = set()
+            for tone in normalized_tones:
+                if tone == "neutral_positive":
+                    expanded_tones.update(["neutral", "positive"])
+                elif tone in {"positive", "neutral", "negative"}:
+                    expanded_tones.add(tone)
+            if expanded_tones:
+                placeholders = ",".join("?" * len(expanded_tones))
+                where_tone = f"AND a.tone IN ({placeholders})"
+                params.extend(sorted(expanded_tones))
+            else:
+                where_tone = "AND 1=0"
 
         row = conn.execute(
             f"""
             SELECT
                 COUNT(*) AS total,
-                SUM(CASE WHEN a.region = 'suomi'   THEN 1 ELSE 0 END) AS suomi,
+                SUM(CASE WHEN a.region = 'suomi' THEN 1 ELSE 0 END) AS suomi,
                 SUM(CASE WHEN a.region = 'maailma' THEN 1 ELSE 0 END) AS maailma,
-                SUM(CASE WHEN a.is_paywall = 1     THEN 1 ELSE 0 END) AS paywall
+                SUM(CASE WHEN a.is_paywall = 1 THEN 1 ELSE 0 END) AS paywall
             FROM articles a
             WHERE 1=1
               {where_region}
               {where_paywall}
               {where_sources}
+              {where_tone}
             """,
             params,
         ).fetchone()
         return {
-            "total": row["total"] or 0,
-            "suomi": row["suomi"] or 0,
-            "maailma": row["maailma"] or 0,
-            "paywall": row["paywall"] or 0,
+            "total": int(row["total"] or 0),
+            "suomi": int(row["suomi"] or 0),
+            "maailma": int(row["maailma"] or 0),
+            "paywall": int(row["paywall"] or 0),
         }
     finally:
         conn.close()
+
+
+def get_article_facets(
+    hide_paywall: bool = False,
+    excluded_sources: list[str] | None = None,
+    scope_filters: list[str] | None = None,
+    local_cities: list[str] | None = None,
+) -> dict[str, Any]:
+    rows = list_articles(
+        limit=10_000_000,
+        offset=0,
+        hide_paywall=hide_paywall,
+        excluded_sources=excluded_sources,
+        scope_filters=scope_filters,
+        local_cities=local_cities,
+    )
+
+    categories: dict[str, int] = {}
+    sources: dict[str, int] = {}
+    tones: dict[str, int] = {"positive": 0, "neutral": 0, "negative": 0}
+    scopes = {"suomi": 0, "maailma": 0, "paikalliset": 0}
+    cities: dict[str, int] = {}
+
+    for row in rows:
+        source = row["source"] or "Tuntematon"
+        sources[source] = sources.get(source, 0) + 1
+
+        tone = _normalize_key(row["tone"])
+        if tone in tones:
+            tones[tone] += 1
+
+        region = row["region"] or ""
+        if region == "suomi":
+            scopes["suomi"] += 1
+        elif region == "maailma":
+            scopes["maailma"] += 1
+        elif region.startswith("paikalliset:"):
+            scopes["paikalliset"] += 1
+            city = region.split(":", 1)[1]
+            cities[city] = cities.get(city, 0) + 1
+
+        for key in _categories_from_row(row):
+            categories[key] = categories.get(key, 0) + 1
+
+    return {
+        "total": len(rows),
+        "categories": categories,
+        "sources": sources,
+        "tones": tones,
+        "scopes": scopes,
+        "cities": cities,
+    }
 
 
 def top_feedback_metrics(limit: int = 10) -> dict[str, float | int | None]:

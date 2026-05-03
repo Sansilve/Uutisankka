@@ -7,6 +7,7 @@ from ..config import SCORING_VERSION
 from ..database import (
     count_articles,
     get_preferences,
+    get_article_facets,
     get_swipe_history,
     list_articles,
     top_feedback_metrics,
@@ -61,18 +62,41 @@ def get_articles_stats() -> dict:
 
 @router.get("/articles", response_model=AllNewsResponse)
 def get_all_articles(
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     include_paywall: bool = Query(default=False),
+    scopes: list[str] = Query(default_factory=lambda: ["suomi", "maailma", "paikalliset"]),
+    local_cities: list[str] = Query(default_factory=list),
+    categories: list[str] = Query(default_factory=list),
+    sources: list[str] = Query(default_factory=list),
+    tones: list[str] = Query(default_factory=list),
 ) -> AllNewsResponse:
     """Development endpoint: browse all latest articles."""
     prefs = get_preferences()
+    hide_paywall = False if include_paywall else prefs.get("hide_paywall", True)
+    excluded_sources = prefs.get("excluded_sources") or None
+
     rows = list_articles(
         limit=limit,
         offset=offset,
-        region_filters=_scope_to_regions(prefs),
-        hide_paywall=False if include_paywall else prefs.get("hide_paywall", True),
-        excluded_sources=prefs.get("excluded_sources") or None,
+        region_filters=None,
+        hide_paywall=hide_paywall,
+        excluded_sources=excluded_sources,
+        scope_filters=scopes,
+        local_cities=local_cities,
+        source_filters=sources,
+        category_filters=categories,
+        tone_filters=tones,
+    )
+    stats = count_articles(
+        region_filters=None,
+        hide_paywall=hide_paywall,
+        excluded_sources=excluded_sources,
+        scope_filters=scopes,
+        local_cities=local_cities,
+        source_filters=sources,
+        category_filters=categories,
+        tone_filters=tones,
     )
     items: list[AllNewsItem] = []
     for row in rows:
@@ -87,7 +111,26 @@ def get_all_articles(
                 topics=json.loads(row["topics"] or "[]"),
                 summary=json.loads(row["summary_json"] or '{"bullets": []}'),
                 is_paywall=bool(row["is_paywall"]),
+                score=float(row["score"] or 0.0),
+                category=row["category"],
+                category_secondary=row["category_secondary"],
+                tone=row["tone"],
             )
         )
     log.info("GET /api/articles limit=%d include_paywall=%s → %d items", limit, include_paywall, len(items))
-    return AllNewsResponse(total=len(items), items=items)
+    return AllNewsResponse(total=int(stats.get("total", len(items))), items=items)
+
+
+@router.get("/articles/facets")
+def get_all_articles_facets(
+    include_paywall: bool = Query(default=False),
+    scopes: list[str] = Query(default_factory=lambda: ["suomi", "maailma", "paikalliset"]),
+    local_cities: list[str] = Query(default_factory=list),
+) -> dict:
+    prefs = get_preferences()
+    return get_article_facets(
+        hide_paywall=False if include_paywall else prefs.get("hide_paywall", True),
+        excluded_sources=prefs.get("excluded_sources") or None,
+        scope_filters=scopes,
+        local_cities=local_cities,
+    )
