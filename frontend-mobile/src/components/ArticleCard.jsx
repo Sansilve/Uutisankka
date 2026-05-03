@@ -120,6 +120,34 @@ function bulletsToLead(bullets) {
   return bullets.slice(0, 3).join(' ')
 }
 
+function getToneEmoji(tone) {
+  if (!tone) return null
+  switch (tone.toLowerCase()) {
+    case 'positive':
+      return '😊'
+    case 'neutral':
+      return '😐'
+    case 'negative':
+      return '😔'
+    default:
+      return null
+  }
+}
+
+function getToneLabel(tone) {
+  if (!tone) return null
+  switch (tone.toLowerCase()) {
+    case 'positive':
+      return 'Positiivinen'
+    case 'neutral':
+      return 'Neutraali'
+    case 'negative':
+      return 'Negatiivinen'
+    default:
+      return null
+  }
+}
+
 export default function ArticleCard({
   story,
   onDecision,
@@ -253,6 +281,11 @@ export default function ArticleCard({
                   </Text>
                 </View>
               ))}
+              {story.tone && (
+                <View style={styles.toneBadge} title={`${getToneLabel(story.tone)} (${story.tone_confidence ? (story.tone_confidence * 100).toFixed(0) : '?'}%)`}>
+                  <Text style={styles.toneBadgeText}>{getToneEmoji(story.tone)} {getToneLabel(story.tone)}</Text>
+                </View>
+              )}
               {story.is_paywall && (
                 <View style={styles.paywallBadge}>
                   <Text style={styles.paywallBadgeText}>🔒 Maksumuuri</Text>
@@ -464,6 +497,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  toneBadge: {
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    borderRadius: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: '#f9fafb',
+  },
+  toneBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#4b5563',
   },
   paywallBadge: {
     borderWidth: 1,
