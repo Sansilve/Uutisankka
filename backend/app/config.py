@@ -29,6 +29,11 @@ FALLBACK_LLM_MODEL: str = os.getenv("FALLBACK_LLM_MODEL", "llama-3.1-8b-instant"
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
+# LLM traffic shaping (queue + throttle per provider)
+LLM_MAX_RPS_OPENAI: float = float(os.getenv("LLM_MAX_RPS_OPENAI", "1.0"))
+LLM_MAX_RPS_FALLBACK: float = float(os.getenv("LLM_MAX_RPS_FALLBACK", "2.0"))
+LLM_MAX_RPS_GEMINI: float = float(os.getenv("LLM_MAX_RPS_GEMINI", "2.0"))
+
 # Maps feed URL → region tag: "suomi" | "maailma" | "paikalliset:<city>"
 FEED_REGIONS: dict[str, str] = {
     # Finland national
