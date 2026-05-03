@@ -101,7 +101,7 @@ def init_db() -> None:
 
 def ensure_default_preferences() -> None:
     default_interests = ["technology", "politics", "economy"]
-    default_dislikes = ["celebrity", "entertainment"]
+    default_dislikes: list[str] = []
     upsert_preferences(default_interests, default_dislikes, only_if_missing=True)
 
 
@@ -157,7 +157,7 @@ def get_preferences() -> dict:
         if not row:
             return {
                 "interests": ["politiikka", "teknologia", "talous"],
-                "disliked_topics": ["viihde", "celebrity"],
+                "disliked_topics": [],
                 "news_scope": ["suomi", "maailma"],
                 "local_city": "",
                 "hide_paywall": True,

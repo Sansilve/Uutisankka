@@ -34,8 +34,11 @@ Esimerkiksi: "Leikkaukset vaikuttavat palvelujen saatavuuteen" tai \
 "Tutkimus voi muuttaa hoito-ohjeita miljoonille ihmisille". \
 ÄLÄ toista "Mitä tapahtui" -kohtaa eri sanoin. Saa käyttää yleistietoa artikkelin lisäksi.
 
-- Osapuolet: VAIN jos henkilöt/organisaatiot ovat merkittäviä tai yllättäviä. \
-Esimerkiksi: "Pääministeri Orpo", "Euroopan komissio", "OpenAI". \
+- Osapuolet: VAIN merkittävät henkilöt tai organisaatiot. Käytä AINA nominatiivia \
+(perusmuoto, ei taivutettuna — ei 'Tokion' vaan 'Tokio', ei 'Instagramissa' vaan 'Instagram'). \
+Kirjoita henkilöiden KOKO NIMI yhtenä kohtana (etunimi + sukunimi), esim. "Alisa Vainio", \
+"Petteri Orpo". Muut esimerkit: "Euroopan komissio", "Instagram". \
+ÄLÄ listaa saman henkilön etu- ja sukunimeä erillisinä — ne kuuluvat yhteen. \
 JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija).
 
 - Tausta: Relevantti konteksti — vain jos selittää miksi tilanne on syntynyt.
@@ -117,10 +120,49 @@ def _split_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if len(p.strip()) > 25]
 
 
+# Common Finnish locative/case suffixes to strip (longest first prevents partial matches)
+_FI_CASE_SUFFIXES = (
+    "issa", "issä", "ista", "istä",   # inessive/elative of -inen words
+    "ssa", "ssä", "sta", "stä",        # inessive, elative
+    "lle", "lla", "llä", "lta", "ltä", # allative, adessive, ablative
+    "ksi", "na", "nä",                 # translative, essive
+)
+
+
+def _strip_fi_suffix(word: str) -> str:
+    """Approximate Finnish nominative by stripping one common case suffix."""
+    low = word.lower()
+    for suffix in _FI_CASE_SUFFIXES:
+        if low.endswith(suffix) and len(word) > len(suffix) + 2:
+            return word[: -len(suffix)]
+    # Genitive -n: strip only when stem is 4+ chars and ends in a vowel
+    if low.endswith("n") and len(word) >= 5 and low[-2] in "aeiouäö":
+        return word[:-1]
+    return word
+
+
 def _extract_entities(text: str) -> list[str]:
-    matches = re.findall(r"\b[A-Z][a-zA-Z\-]{2,}\b", text)
-    counts = Counter(matches)
-    return [item for item, _ in counts.most_common(4)]
+    # Capture runs of consecutive Title-Cased words as multi-word proper nouns
+    # Supports Finnish characters (Ä Ö Å)
+    raw_phrases: list[str] = re.findall(
+        r"\b[A-ZÄÖÅ][a-zA-ZäöåÄÖÅ\-]{1,}(?:\s+[A-ZÄÖÅ][a-zA-ZäöåÄÖÅ\-]{1,})*\b",
+        text,
+    )
+    counts = Counter(raw_phrases)
+    seen: set[str] = set()
+    result: list[str] = []
+    for phrase, _ in counts.most_common(8):
+        words = phrase.split()
+        # Strip case suffix from the last word only (typically carries inflection)
+        words[-1] = _strip_fi_suffix(words[-1])
+        norm = " ".join(words)
+        key = norm.lower()
+        if key not in seen:
+            seen.add(key)
+            result.append(norm)
+        if len(result) >= 4:
+            break
+    return result
 
 
 def _deterministic_summarize(title: str, content: str) -> dict[str, list[str]]:
