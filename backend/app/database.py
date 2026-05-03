@@ -77,13 +77,6 @@ def init_db() -> None:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_swipe_history_swiped_at ON swipe_history (swiped_at DESC);
-
-                CREATE TABLE IF NOT EXISTS llm_cache (
-                    content_hash TEXT PRIMARY KEY,
-                    summary_json TEXT NOT NULL,
-                    translated_title TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
                 """
             )
             _ensure_column(conn, "articles", "base_score", "REAL DEFAULT 0")
@@ -275,41 +268,6 @@ def article_exists_with_hash(content_hash: str, limit_hours: int = 96) -> bool:
         conn.close()
 
 
-def get_llm_cache(content_hash: str) -> dict | None:
-    """Return cached LLM result for *content_hash*, or None if not present."""
-    conn = _conn()
-    try:
-        row = conn.execute(
-            "SELECT summary_json, translated_title FROM llm_cache WHERE content_hash = ?",
-            (content_hash,),
-        ).fetchone()
-        if row is None:
-            return None
-        return {
-            "summary_json": row["summary_json"],
-            "translated_title": row["translated_title"],
-        }
-    finally:
-        conn.close()
-
-
-def set_llm_cache(content_hash: str, summary_json: str, translated_title: str | None = None) -> None:
-    """Store an LLM result in the cache. Silently replaces any existing entry."""
-    with _db_lock:
-        conn = _conn()
-        try:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO llm_cache (content_hash, summary_json, translated_title)
-                VALUES (?, ?, ?)
-                """,
-                (content_hash, summary_json, translated_title),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-
 def recent_titles(limit: int = 250) -> list[str]:
     conn = _conn()
     try:
@@ -327,10 +285,9 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
     try:
         rows = conn.execute(
             """
-            SELECT id, title, source, published_at, content, url, content_hash
+            SELECT id, title, source, published_at, content, url
             FROM articles
-            WHERE summary_json IS NULL
-               OR summary_json = '{"bullets": []}'
+            WHERE summary_json = '{"bullets": []}'
             ORDER BY created_at DESC
             LIMIT ?
             """,
@@ -486,6 +443,38 @@ def get_article_feedback_score(article_id: int) -> float:
         return float(row["feedback_score"] or 0.0)
     finally:
         conn.close()
+
+
+def get_topic_swipe_stats() -> dict[str, dict[str, int]]:
+    """Return per-topic swipe counts from swipe_history joined with articles.
+
+    Returns:
+        {topic: {"positive": int, "total": int}}
+    """
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT a.topics, s.is_relevant
+            FROM swipe_history s
+            JOIN articles a ON a.id = s.article_id
+            WHERE a.topics IS NOT NULL AND a.topics != '[]'
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    stats: dict[str, dict[str, int]] = {}
+    for row in rows:
+        topics: list[str] = json.loads(row["topics"] or "[]")
+        is_positive = bool(row["is_relevant"])
+        for topic in topics:
+            if topic not in stats:
+                stats[topic] = {"positive": 0, "total": 0}
+            stats[topic]["total"] += 1
+            if is_positive:
+                stats[topic]["positive"] += 1
+    return stats
 
 
 def update_article_enrichment(

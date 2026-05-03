@@ -185,3 +185,55 @@ LOW_SIGNAL_PATTERNS = [
 ]
 
 BREAKING_HINTS = ["breaking", "urgent", "developing", "juuri nyt", "äskettäin", "tärkeää"]
+
+# Target language for LLM translation (BCP-47 code).
+# Changing this in .env is sufficient to switch the translation target.
+# Internal use only — no UI exposure.
+TRANSLATION_TARGET_LANG: str = os.getenv("TRANSLATION_TARGET_LANG", "fi")
+
+# Human-readable language name for the target language — used in prompts.
+_LANG_NAMES: dict[str, str] = {
+    "fi": "Finnish",
+    "sv": "Swedish",
+    "de": "German",
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+}
+TRANSLATION_TARGET_LANG_NAME: str = _LANG_NAMES.get(TRANSLATION_TARGET_LANG, TRANSLATION_TARGET_LANG)
+
+# Adaptive scoring feature flag.
+# When enabled, topic weights are adjusted based on swipe history.
+ADAPTIVE_SCORING_ENABLED: bool = os.getenv("ADAPTIVE_SCORING_ENABLED", "false").lower() == "true"
+
+# Minimum swipe count per topic before adaptive adjustment kicks in.
+ADAPTIVE_MIN_SWIPES: int = int(os.getenv("ADAPTIVE_MIN_SWIPES", "5"))
+
+# Source quality tiers — governs pre-filter content-length requirements.
+# Domains not listed are treated as "medium".
+# low-tier sources require LOW_TIER_MIN_CONTENT_LENGTH characters before LLM call.
+SOURCE_QUALITY_TIERS: dict[str, str] = {
+    # High-tier: major editorial outlets
+    "yle.fi": "high",
+    "hs.fi": "high",
+    "kauppalehti.fi": "high",
+    "bbc.co.uk": "high",
+    "nytimes.com": "high",
+    "theguardian.com": "high",
+    "ft.com": "high",
+    "reuters.com": "high",
+    # Medium-tier: regional / specialised outlets (default, no entry needed)
+    # Low-tier: PR wires, aggregators, short-form feeds
+    "prwire.fi": "low",
+    "businesswire.com": "low",
+    "prnewswire.com": "low",
+    "globenewswire.com": "low",
+    "accesswire.com": "low",
+}
+
+# Minimum content length (chars) for low-tier sources before LLM is called.
+# Override via env: LOW_TIER_MIN_CONTENT_LENGTH
+LOW_TIER_MIN_CONTENT_LENGTH: int = int(os.getenv("LOW_TIER_MIN_CONTENT_LENGTH", "300"))
+
+# Minimum content length for all other sources (existing threshold).
+MIN_CONTENT_LENGTH: int = int(os.getenv("MIN_CONTENT_LENGTH", "150"))

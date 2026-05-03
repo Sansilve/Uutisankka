@@ -29,6 +29,7 @@ class SummaryPayload(BaseModel):
 class ScoreBreakdownItem(BaseModel):
     reason: str
     points: float
+    category: str = ""
 
 
 class ScoreBreakdownPayload(BaseModel):
