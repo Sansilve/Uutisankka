@@ -1,18 +1,15 @@
 """
 Article summarizer.
 
-Primary path  : LLM (OpenAI, with fallback to secondary provider) → 3–5 Finnish bullet points.
+Primary path  : OpenAI chat completion → 3–5 Finnish bullet points.
 Fallback path : Deterministic heuristic summarizer (no API key required).
 """
 
-import logging
 import re
 from collections import Counter
 
-from ..config import OPENAI_API_KEY, FALLBACK_LLM_API_KEY, GEMINI_API_KEY
-from .llm import LLMUnavailable, chat_with_fallback
-
-log = logging.getLogger(__name__)
+from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
+from .llm import LLMUnavailable, chat_with_fallback, validate_llm_response
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +34,8 @@ Esimerkiksi: "Leikkaukset vaikuttavat palvelujen saatavuuteen" tai \
 ÄLÄ toista "Mitä tapahtui" -kohtaa eri sanoin. Saa käyttää yleistietoa artikkelin lisäksi.
 
 - Osapuolet: VAIN jos henkilöt/organisaatiot ovat merkittäviä tai yllättäviä. \
-Esimerkiksi: "Pääministeri Petteri Orpo", "Euroopan komissio", "OpenAI". \
-JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija), käytä perusmuotoja.
+Esimerkiksi: "Pääministeri Orpo", "Euroopan komissio", "OpenAI". \
+JÄÄ POIS jos osapuolet ovat tuntemattomia tai yleisiä (poliitikko, asiantuntija).
 
 - Tausta: Relevantti konteksti — vain jos selittää miksi tilanne on syntynyt.
 
@@ -52,13 +49,7 @@ TÄRKEÄÄ:
 
 
 def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
-    if not OPENAI_API_KEY and not FALLBACK_LLM_API_KEY and not GEMINI_API_KEY:
-        return None
-
-    stripped = content.strip()
-    # Prefilter low-signal content before spending LLM tokens.
-    sentence_count = len([s for s in re.split(r"[.!?]+", stripped) if len(s.strip()) > 20])
-    if len(stripped) < 120 or sentence_count <= 1:
+    if not (OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY):
         return None
 
     user_text = f"Otsikko: {title}\n\nSisältö: {content[:2500]}"
@@ -68,28 +59,26 @@ def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
     ]
 
     try:
-        raw = chat_with_fallback(messages, max_tokens=400, temperature=0.3)
-
-        def _parse_bullets(text: str) -> list[str]:
-            parsed = [
-                line.lstrip("•*-– ").strip()
-                for line in text.splitlines()
-                if line.strip()
-            ]
-            return [b for b in parsed if len(b) > 10]
-
-        bullets = _parse_bullets(raw)
-        if len(bullets) >= 3:
+        raw = chat_with_fallback(
+            messages=messages,
+            max_tokens=400,
+            temperature=0.3,
+            validator=lambda text: validate_llm_response(
+                text,
+                min_bullets=1,
+                input_text=user_text,
+            ),
+        )
+        bullets = [
+            line.lstrip("•*-– ").strip()
+            for line in raw.splitlines()
+            if line.strip()
+        ]
+        bullets = [b for b in bullets if len(b) > 10]
+        if bullets:
             return {"bullets": bullets[:5], "source": "llm"}
-
-        # Premium retry: weak/short output gets one OpenAI-prioritised retry.
-        if OPENAI_API_KEY:
-            retry_raw = chat_with_fallback(messages, max_tokens=450, temperature=0.25, premium=True)
-            retry_bullets = _parse_bullets(retry_raw)
-            if retry_bullets:
-                return {"bullets": retry_bullets[:5], "source": "llm"}
-    except LLMUnavailable as exc:
-        log.warning("_llm_summarize: all LLM providers failed – %s", exc)
+    except LLMUnavailable:
+        pass
 
     return None
 
@@ -170,13 +159,6 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     # not just "short", since a real article can have a short lead sentence.
     stripped = content.strip() if content else ""
     title_stripped = title.strip()
-
-    # If content is genuinely absent (RSS feed omits article body), do not treat
-    # as paywall — the article may be freely accessible on the website.
-    # Use a distinct source value so database.py does NOT set is_paywall=1.
-    if not stripped:
-        return {"bullets": [], "source": "empty_feed"}
-
     # Normalize both for comparison: lowercase, collapse whitespace
     def _norm(s: str) -> str:
         return re.sub(r"\s+", " ", s.lower().strip())
@@ -186,7 +168,7 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
 
     # Paywall keywords in Finnish/English that indicate subscriber-only content
     _PAYWALL_WORDS = [
-        "tilaajille", "vain tilaajille", "maksullinen",
+        "tilaajille", "tilaa", "vain tilaajille", "maksullinen",
         "subscribers only", "premium", "paywall",
     ]
     has_paywall_word = any(w in norm_content for w in _PAYWALL_WORDS)
@@ -215,12 +197,10 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     sentence_count = len([s for s in re.split(r'[.!?]+', stripped) if len(s.strip()) > 15])
 
     structural_paywall = (
-        (0 < len(stripped) < 30)  # very short but non-empty — likely truncated paywall
+        len(stripped) < 30  # essentially empty
         or norm_content == norm_title  # content is exactly the title
         or (len(stripped) < 80 and norm_title.startswith(norm_content[:40]))  # content is prefix of title
         or (len(stripped) < 80 and norm_content.startswith(norm_title[:40]))  # content starts with title
-        # Note: len == 0 (empty content) is NOT treated as paywall — RSS feeds may simply
-        # omit article text. Caller handles empty-content articles separately.
     )
 
     teaser_paywall = (
@@ -238,21 +218,17 @@ def summarize_article(title: str, content: str, source: str = "") -> dict[str, l
     elif is_likely_paywalled_source and not is_mixed_tabloid_source:
         is_paywall = teaser_paywall
     elif is_mixed_tabloid_source:
-        # IS/IL RSS feeds give short free leads — only rely on hard keyword evidence.
-        # Prefer false negatives over false positives (loose detection).
-        is_paywall = False
+        # IS/IL feeds often have very short but free leads.
+        is_paywall = len(stripped) < 120 and sentence_count <= 1
     else:
         # For free/unknown sources, do not mark paywall from short teaser alone.
         is_paywall = False
 
     if is_paywall:
-        log.debug("summarize_article: paywall detected for '%s' (source=%s)", title[:60], source)
         return {"bullets": [], "source": "no_content"}
 
     result = _llm_summarize(title, content)
     if result is not None:
-        log.debug("summarize_article: LLM summary OK for '%s'", title[:60])
         return result
-    log.debug("summarize_article: LLM unavailable/failed, using heuristic for '%s'", title[:60])
     return _deterministic_summarize(title, content)
 

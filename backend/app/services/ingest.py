@@ -11,16 +11,7 @@ from urllib.request import urlopen
 
 import feedparser
 
-try:
-    import trafilatura as _trafilatura
-    _TRAFILATURA_AVAILABLE = True
-except ImportError:
-    _trafilatura = None  # type: ignore[assignment]
-    _TRAFILATURA_AVAILABLE = False
-
-from ..config import DEFAULT_FEEDS, FEED_REGIONS
-
-log = logging.getLogger(__name__)
+from ..config import DEFAULT_FEEDS, FEED_REGIONS, TRANSLATION_SCORE_THRESHOLD
 from ..database import (
     article_exists_with_hash,
     batch_fetch_feedback_scores,
@@ -30,48 +21,20 @@ from ..database import (
     fetch_unscored,
     fetch_untranslated_english,
     get_article_feedback_score,
-    get_llm_cache,
     get_preferences,
     insert_article,
     recent_titles,
-    set_llm_cache,
     update_article_enrichment,
     update_article_score_only,
     update_article_title,
 )
 from .scoring import score_article
-from .summarizer import summarize_article
+from .summarizer import _deterministic_summarize, summarize_article
 from .translator import is_english_url, translate_and_summarize, translate_title
 
 
 TAG_RE = re.compile(r"<[^>]+>")
-
-# Minimum content length to skip web scraping fallback
-_MIN_CONTENT_LENGTH = 150
-
-
-def _scrape_article_content(url: str) -> str:
-    """Try to fetch full article text from the target URL using trafilatura.
-
-    Returns empty string if scraping is unavailable, fails, or yields no content.
-    Respects a short timeout so it doesn't block the enrichment pipeline.
-    """
-    if not _TRAFILATURA_AVAILABLE or not url:
-        return ""
-    try:
-        downloaded = _trafilatura.fetch_url(url)
-        if not downloaded:
-            return ""
-        text = _trafilatura.extract(
-            downloaded,
-            include_comments=False,
-            include_tables=False,
-            no_fallback=False,
-        )
-        return (text or "").strip()
-    except Exception as exc:  # network errors, parse errors, etc.
-        log.debug("_scrape_article_content: failed for %s – %s", url, exc)
-        return ""
+log = logging.getLogger(__name__)
 
 
 def _clean(value: str | None) -> str:
@@ -140,7 +103,6 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
     inserted = 0
     duplicates = 0
 
-    log.info("ingest_feeds: starting, %d feeds", len(feeds))
     titles = recent_titles(limit=300)
 
     for url in feeds:
@@ -148,8 +110,7 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
             with urlopen(url, timeout=8) as response:
                 payload = response.read()
             parsed = feedparser.parse(payload)
-        except (TimeoutError, URLError, OSError) as exc:
-            log.warning("ingest_feeds: skipping feed %s – %s", url, exc)
+        except (TimeoutError, URLError, OSError):
             # Skip sources that are temporarily unavailable instead of blocking ingestion.
             continue
 
@@ -187,10 +148,6 @@ def ingest_feeds(feed_urls: list[str] | None = None) -> dict[str, int]:
                 duplicates += 1
 
     enriched = enrich_unprocessed_articles()
-    log.info(
-        "ingest_feeds: done – fetched=%d inserted=%d duplicates=%d enriched=%d",
-        fetched, inserted, duplicates, enriched,
-    )
     return {
         "fetched": fetched,
         "inserted": inserted,
@@ -203,59 +160,51 @@ def enrich_unprocessed_articles() -> int:
     """Generate summaries for new articles, then score anything unscored."""
     preferences = get_preferences()
     count = 0
-
-    unenriched = fetch_unenriched(limit=300)
-    log.info("enrich_unprocessed_articles: %d articles to summarise", len(unenriched))
+    filtered_below_threshold = 0
+    llm_routed = 0
 
     # Step 1: summarise articles that have no summary yet
-    for row in unenriched:
+    for row in fetch_unenriched(limit=300):
         url = row["url"] or ""
         content = row["content"] or ""
-        content_hash = row["content_hash"]
 
-        # If RSS content is absent or too short to summarise, try scraping the URL.
-        # Track whether scraping was attempted so we can infer paywall if it fails.
-        scrape_attempted = False
-        if len(content.strip()) < _MIN_CONTENT_LENGTH and url:
-            scrape_attempted = True
-            scraped = _scrape_article_content(url)
-            if len(scraped) > len(content):
-                log.debug("enrich: scraped %d chars from %s (was %d)", len(scraped), url, len(content))
-                content = scraped
-            else:
-                log.debug("enrich: scraping yielded nothing for %s – likely paywalled", url)
-
-        # If we tried scraping but still have no useful content, the article is likely
-        # behind a paywall or login wall. Mark it as paywall directly and skip LLM.
-        if scrape_attempted and len(content.strip()) < _MIN_CONTENT_LENGTH:
-            log.debug("enrich: marking as paywall (scrape failed, no content) for %s", url)
-            summary = {"bullets": [], "source": "no_content"}
-            finnish_title = None
-        # --- Cache lookup ---
-        elif cached := get_llm_cache(content_hash):
-            log.debug("enrich_unprocessed_articles: cache hit for %s", url)
-            summary = json.loads(cached["summary_json"])
-            finnish_title = cached["translated_title"]
-        elif is_english_url(url):
-            # One LLM call: translate title to Finnish + produce Finnish bullets
-            finnish_title, summary = translate_and_summarize(row["title"], content)
-            if summary.get("source") == "llm":
-                set_llm_cache(content_hash, json.dumps(summary), finnish_title)
-        else:
-            finnish_title = None
-            summary = summarize_article(row["title"], content, row["source"])
-            if summary.get("source") == "llm":
-                set_llm_cache(content_hash, json.dumps(summary), None)
-
-        # Score using the (potentially translated) title for better Finnish keyword matching
-        score_title = finnish_title or row["title"]
-        base_score, topics, breakdown_items = score_article(
-            title=score_title,
+        pre_base_score, pre_topics, pre_breakdown_items = score_article(
+            title=row["title"],
             content=content,
             source=row["source"],
             published_at=row["published_at"],
             preferences=preferences,
         )
+
+        below_threshold = pre_base_score < TRANSLATION_SCORE_THRESHOLD
+        score_title = row["title"]
+        base_score = pre_base_score
+        topics = pre_topics
+        breakdown_items = pre_breakdown_items
+
+        if below_threshold:
+            filtered_below_threshold += 1
+            finnish_title = None
+            summary = _deterministic_summarize(row["title"], content)
+        else:
+            llm_routed += 1
+            if is_english_url(url):
+                # One LLM call: translate title to Finnish + produce Finnish bullets
+                finnish_title, summary = translate_and_summarize(row["title"], content)
+            else:
+                finnish_title = None
+                summary = summarize_article(row["title"], content, row["source"])
+
+            # Score using translated title when available for better Finnish keyword matching.
+            score_title = finnish_title or row["title"]
+            base_score, topics, breakdown_items = score_article(
+                title=score_title,
+                content=content,
+                source=row["source"],
+                published_at=row["published_at"],
+                preferences=preferences,
+            )
+
         feedback_score = get_article_feedback_score(row["id"])
         total_score = round(base_score + feedback_score, 2)
         update_article_enrichment(
@@ -264,7 +213,14 @@ def enrich_unprocessed_articles() -> int:
         )
         count += 1
 
-    log.info("enrich_unprocessed_articles: enriched %d articles", count)
+    log.info(
+        "enrich_unprocessed_articles: processed=%d llm_routed=%d filtered_below_threshold=%d threshold=%.2f",
+        count,
+        llm_routed,
+        filtered_below_threshold,
+        TRANSLATION_SCORE_THRESHOLD,
+    )
+
     # Step 2: score any articles that have a summary but score=0 (e.g. after reset)
     count += rescore_all(preferences)
     return count
@@ -300,7 +256,6 @@ def rescore_all(preferences: dict | None = None) -> int:
     if not rows:
         return 0
 
-    log.info("rescore_all: rescoring %d articles", len(rows))
     # Fetch all feedback scores in ONE query instead of one per article
     feedback_scores = batch_fetch_feedback_scores()
 

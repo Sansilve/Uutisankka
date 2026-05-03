@@ -5,7 +5,13 @@ from email.utils import parsedate_to_datetime
 
 from dateutil import parser
 
-from ..config import MAJOR_SOURCES
+from ..config import (
+    BREAKING_HINTS,
+    CLICKBAIT_PATTERNS,
+    LOW_SIGNAL_PATTERNS,
+    MAJOR_SOURCES,
+    TOPIC_WEIGHTS,
+)
 
 # Keys match the chip IDs in the frontend exactly.
 # Each list contains Finnish and English keywords found in article text/titles.
@@ -102,49 +108,6 @@ TOPIC_KEYWORDS: dict[str, list[str]] = {
         "weather", "temperature", "forecast", "storm", "heatwave", "snow", "frost",
     ],
 }
-
-TOPIC_WEIGHTS: dict[str, float] = {
-    "politiikka":    2.8,
-    "talous":        2.3,
-    "teknologia":    2.4,
-    "urheilu":       1.5,
-    "kulttuuri":     1.2,
-    "terveys":       2.0,
-    "ympäristö":     1.8,
-    "tiede":         1.8,
-    "turvallisuus":  2.6,
-    "koulutus":      1.5,
-    "kansainväliset": 2.5,
-    "viihde":       -1.6,
-    "celebrity":    -2.5,
-    "rikokset":     -0.8,
-    "onnettomuudet": -0.5,
-    "sää":          -0.5,
-}
-
-CLICKBAIT_PATTERNS = [
-    r"you won[' ]t believe",
-    r"what happened next",
-    r"shocking",
-    r"this one trick",
-    r"goes viral",
-    r"must see",
-    r"et usko",
-    r"hämmästyttävä",
-]
-
-LOW_SIGNAL_PATTERNS = [
-    r"top\s+\d+",
-    r"list of",
-    r"watch:|video:",
-    r"live updates",
-    r"loto(n|ssa|ssa on|tta)",      # Lotto results
-    r"oikea rivi",                   # Lotto "right row" result post
-    r"arpajaistulokset",
-]
-
-BREAKING_HINTS = ["breaking", "urgent", "developing", "juuri nyt", "äskettäin", "tärkeää"]
-
 
 def _parse_time(value: str | None) -> datetime | None:
     if not value:

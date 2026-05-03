@@ -360,7 +360,7 @@ function AllArticlesView() {
   )
 }
 
-function PrefsPanel({ prefs, onSaved, setStatusGlobal }) {
+function PrefsPanel({ prefs, onSaved, onUnsavedChange }) {
   const [interests, setInterests] = useState(new Set(prefs.interests || []))
   const [dislikes, setDislikes] = useState(new Set(prefs.disliked_topics || []))
   const [scope, setScope] = useState(new Set(prefs.news_scope || ['suomi', 'maailma']))
@@ -371,28 +371,26 @@ function PrefsPanel({ prefs, onSaved, setStatusGlobal }) {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
 
-  function mark(fn) { return (...a) => { fn(...a); setUnsaved(true) } }
-
   function toggleInterest(id) {
     const next = new Set(interests)
     if (next.has(id)) { next.delete(id) } else { next.add(id); const d = new Set(dislikes); d.delete(id); setDislikes(d) }
-    setInterests(next); setUnsaved(true)
+    setInterests(next); setUnsaved(true); onUnsavedChange?.(true)
   }
   function toggleDislike(id) {
     const next = new Set(dislikes)
     if (next.has(id)) { next.delete(id) } else { next.add(id); const s = new Set(interests); s.delete(id); setInterests(s) }
-    setDislikes(next); setUnsaved(true)
+    setDislikes(next); setUnsaved(true); onUnsavedChange?.(true)
   }
   function toggleScope(id) {
     const next = new Set(scope)
     if (next.has(id)) { if (next.size > 1) { next.delete(id); if (id === 'paikalliset') setCity('') } }
     else { next.add(id) }
-    setScope(next); setUnsaved(true)
+    setScope(next); setUnsaved(true); onUnsavedChange?.(true)
   }
   function toggleSource(id) {
     const next = new Set(excludedSources)
     next.has(id) ? next.delete(id) : next.add(id)
-    setExcludedSources(next); setUnsaved(true)
+    setExcludedSources(next); setUnsaved(true); onUnsavedChange?.(true)
   }
 
   async function pollReenrich() {
@@ -406,7 +404,9 @@ function PrefsPanel({ prefs, onSaved, setStatusGlobal }) {
           setBusy(false); onSaved?.(); return
         }
         setStatus(`Pisteytetään... (${s.enriched ?? 0})`)
-      } catch (_) {}
+      } catch {
+        /* ignore polling errors */
+      }
     }
     setStatus('Pisteytys kesti liian kauan'); setBusy(false)
   }
@@ -422,7 +422,7 @@ function PrefsPanel({ prefs, onSaved, setStatusGlobal }) {
         hide_paywall: hidePaywall,
         excluded_sources: [...excludedSources],
       })
-      setUnsaved(false); setStatus('Tallennettu – pisteytetään...'); pollReenrich()
+      setUnsaved(false); onUnsavedChange?.(false); setStatus('Tallennettu – pisteytetään...'); pollReenrich()
     } catch (e) { setStatus(`Virhe: ${e.message}`); setBusy(false) }
   }
 
@@ -552,6 +552,8 @@ function Onboarding({ onComplete }) {
   const [step, setStep] = useState(0)
   const [interests, setInterests] = useState(new Set(['politiikka', 'talous', 'teknologia']))
   const [dislikes, setDislikes] = useState(new Set(['viihde', 'celebrity']))
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   function toggleI(id) {
     const n = new Set(interests)
@@ -565,8 +567,15 @@ function Onboarding({ onComplete }) {
   }
 
   async function finish() {
-    await updatePreferences({ interests: [...interests], disliked_topics: [...dislikes] })
-    onComplete()
+    setSaving(true)
+    setSaveError("")
+    try {
+      await updatePreferences({ interests: [...interests], disliked_topics: [...dislikes] })
+      onComplete()
+    } catch (e) {
+      setSaveError(e?.message || "Tallennus epäonnistui. Yritä uudelleen.")
+      setSaving(false)
+    }
   }
 
   const s = OB_STEPS[step]
@@ -601,12 +610,13 @@ function Onboarding({ onComplete }) {
         <div className="onboarding-actions">
           {step > 0 && <button className="btn-ghost" onClick={() => setStep(s => s - 1)}>← Takaisin</button>}
           {isLast
-            ? <button className="btn-primary" onClick={finish}>Aloita lukeminen →</button>
+            ? <button className="btn-primary" onClick={finish} disabled={saving}>{saving ? 'Tallennetaan...' : 'Aloita lukeminen →'}</button>
             : <button className="btn-primary" onClick={() => setStep(s => s + 1)}>
                 {step === 0 ? 'Aloita →' : 'Seuraava →'}
               </button>
           }
         </div>
+        {saveError && <p className="status-text">{saveError}</p>}
         <div className="onboarding-dots">
           {OB_STEPS.map((_, i) => <span key={i} className={`dot${i === step ? ' dot--active' : ''}`} />)}
         </div>
@@ -654,6 +664,7 @@ export default function App() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { if (onboarded) loadAll() }, [onboarded, briefingMode])
 
   async function pollReenrich() {
@@ -665,7 +676,9 @@ export default function App() {
         const done = s.state === 'done'
         setStatus(`Pisteytetty ${s.enriched ?? 0}${done ? ' – valmis!' : '...'}`)
         if (done) { await loadAll(); setBusy(false); return }
-      } catch (_) {}
+      } catch {
+        /* ignore polling errors */
+      }
     }
     setStatus('Pisteytys kesti liian kauan.'); setBusy(false)
   }
@@ -759,7 +772,7 @@ export default function App() {
         <PrefsPanel
           prefs={prefs}
           onSaved={() => loadAll()}
-          setStatusGlobal={setStatus}
+          onUnsavedChange={setUnsaved}
         />
       )}
       {activeTab === 'prefs' && !prefs && <p className="empty">Ladataan asetuksia...</p>}
