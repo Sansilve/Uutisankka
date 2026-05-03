@@ -152,7 +152,26 @@ button:disabled { cursor: not-allowed; opacity: 0.5; transform: none; box-shadow
   transition: box-shadow 200ms;
 }
 .card:hover { box-shadow: 0 16px 40px rgba(29,42,53,0.12); }
-.card--voted { opacity: 0.6; }
+.card--voted-yes {
+  border-left: 4px solid #065f46;
+  padding-left: calc(1.1rem - 4px);
+}
+.card--voted-no {
+  border-left: 4px solid #b91c1c;
+  padding-left: calc(1.1rem - 4px);
+}
+.vote-stamp {
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.vote-stamp--yes { background: #dcfce7; color: #065f46; border: 1px solid #6ee7b7; }
+.vote-stamp--no  { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
 
 .card-meta {
   display: flex;
@@ -294,18 +313,22 @@ button:disabled { cursor: not-allowed; opacity: 0.5; transform: none; box-shadow
   color: #b91c1c;
   border-color: #fca5a5;
   flex: 1;
+  transition: opacity 150ms;
 }
 .btn-ohita:hover { background: #fee2e2; }
 .btn-ohita.btn--active { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+.btn-ohita:disabled:not(.btn--active) { opacity: 0.3; }
 
 .btn-kiinnostaa {
   background: #f0fdf4;
   color: #065f46;
   border-color: #6ee7b7;
   flex: 1;
+  transition: opacity 150ms;
 }
 .btn-kiinnostaa:hover { background: #dcfce7; }
 .btn-kiinnostaa.btn--active { background: #065f46; color: #fff; border-color: #065f46; }
+.btn-kiinnostaa:disabled:not(.btn--active) { opacity: 0.3; }
 
 .feedback-count {
   font-size: 0.8rem;

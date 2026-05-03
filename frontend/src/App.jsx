@@ -127,6 +127,12 @@ function formatDateFi(dateStr) {
   return d.toLocaleDateString('fi-FI', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
+function normalizeDisplayText(text) {
+  if (!text) return text
+  // Common typo seen in generated summaries.
+  return text.replace(/\bmksumuur/gi, 'maksumuur')
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 function TopicBadge({ topic }) {
   return (
@@ -136,22 +142,31 @@ function TopicBadge({ topic }) {
   )
 }
 
-function StoryCard({ story, onRate, busy }) {
+function StoryCard({ story, onRate, busy, initialVoted = null }) {
   const [expanded, setExpanded] = useState(false)
-  const [voted, setVoted] = useState(null)
+  const [voted, setVoted] = useState(initialVoted)
 
   async function handleRate(isRelevant) {
     if (voted !== null || busy) return
-    setVoted(isRelevant ? 'yes' : 'no')
-    await onRate(story.id, isRelevant)
+    const nextVote = isRelevant ? 'yes' : 'no'
+    setVoted(nextVote)
+    try {
+      await onRate(story.id, isRelevant)
+    } catch {
+      setVoted(null)
+    }
   }
 
+  const cardClass = `card${voted === 'yes' ? ' card--voted-yes' : voted === 'no' ? ' card--voted-no' : ''}`
+
   return (
-    <article className={`card${voted ? ' card--voted' : ''}`}>
+    <article className={cardClass}>
       <div className="card-meta">
         <span className="card-source">{cleanSource(story.source)}</span>
         {story.score != null && <span className="card-score">{story.score.toFixed(1)} pts</span>}
         {story.is_paywall && <span className="paywall-badge">🔒 Maksumuuri</span>}
+        {voted === 'yes' && <span className="vote-stamp vote-stamp--yes">✓ Kiinnostaa</span>}
+        {voted === 'no' && <span className="vote-stamp vote-stamp--no">× Ohitettu</span>}
         {story.published_at && <span className="card-date">{formatPubDate(story.published_at)}</span>}
       </div>
       <h2 className="card-title">
@@ -159,7 +174,7 @@ function StoryCard({ story, onRate, busy }) {
       </h2>
       <ul className="card-bullets">
         {(story.summary?.bullets || []).slice(0, 4).map((b, i) => (
-          <li key={i}>{b}</li>
+          <li key={i}>{normalizeDisplayText(b)}</li>
         ))}
       </ul>
       {story.topics?.length > 0 && (
@@ -636,6 +651,7 @@ export default function App() {
   const [briefingMode, setBriefingMode] = useState('top') // 'top' | 'random'
   const [status, setStatus] = useState('')
   const [unsaved, setUnsaved] = useState(false)
+  const [ratedStories, setRatedStories] = useState({})
   const [metrics, setMetrics] = useState({ total_feedback_votes: 0, positive_feedback_ratio: null })
   const [busy, setBusy] = useState(false)
   const [briefingLimit] = useState(() => {
@@ -697,7 +713,12 @@ export default function App() {
   async function rateStory(articleId, isRelevant) {
     try {
       await sendFeedback({ article_id: articleId, is_relevant: isRelevant })
-    } catch (e) { setStatus(`Virhe: ${e.message}`) }
+      setRatedStories(prev => ({ ...prev, [articleId]: isRelevant ? 'yes' : 'no' }))
+      setStatus(isRelevant ? '✓ Kiinnostaa – tallennettu' : '× Ohitettu – tallennettu')
+    } catch (e) {
+      setStatus(`Virhe: ${e.message}`)
+      throw e
+    }
   }
 
   if (!onboarded) {
@@ -764,7 +785,13 @@ export default function App() {
           {busy && briefing.stories.length === 0 && <p className="empty">Ladataan...</p>}
           {!busy && briefing.stories.length === 0 && <p className="empty">Ei uutisia – paina Päivitä.</p>}
           {briefing.stories.map(story => (
-            <StoryCard key={story.id} story={story} onRate={rateStory} busy={false} />
+            <StoryCard
+              key={story.id}
+              story={story}
+              onRate={rateStory}
+              busy={false}
+              initialVoted={ratedStories[story.id] ?? null}
+            />
           ))}
         </section>
       )}
