@@ -26,6 +26,7 @@ from .api.errors import unhandled_exception_handler
 from .api.feedback import router as feedback_router
 from .api.ingest import router as ingest_router
 from .api.preferences import router as preferences_router
+from .config import SCORING_VERSION
 from .database import ensure_default_preferences, init_db
 from .services.ingest import ingest_feeds
 
@@ -99,6 +100,7 @@ async def _periodic_ingest() -> None:
 async def lifespan(app: FastAPI):
     global background_task
     log.info("startup: initialising database")
+    log.info("Scoring version: %s", SCORING_VERSION)
     init_db()
     ensure_default_preferences()
     background_task = asyncio.create_task(_periodic_ingest())

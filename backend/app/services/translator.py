@@ -80,6 +80,11 @@ def _build_system_prompt(target_lang_name: str = TRANSLATION_TARGET_LANG_NAME) -
 _SYSTEM_PROMPT = _build_system_prompt()
 
 
+def _is_title_echo(candidate: str, original_title: str) -> bool:
+    """Return True when LLM headline is effectively unchanged from source title."""
+    return candidate.strip().casefold() == original_title.strip().casefold()
+
+
 def translate_and_summarize(
     title: str, content: str
 ) -> tuple[str, dict[str, list[str] | str]]:
@@ -118,19 +123,23 @@ def translate_and_summarize(
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
 
         finnish_title = title  # fallback
+        title_echo_detected = False
         bullets: list[str] = []
 
         for line in lines:
             if line.upper().startswith("HEADLINE:"):
                 extracted = line[len("HEADLINE:"):].strip()
                 if extracted:
-                    finnish_title = extracted
+                    if _is_title_echo(extracted, title):
+                        title_echo_detected = True
+                    else:
+                        finnish_title = extracted
             elif line.startswith(("-", "•", "*", "–")):
                 bullet = line.lstrip("-•*– ").strip()
                 if len(bullet) > 10:
                     bullets.append(bullet)
 
-        if len(bullets) >= 3:
+        if len(bullets) >= 3 and not title_echo_detected:
             return finnish_title, {"bullets": bullets[:5], "source": "llm"}
 
         # Premium retry: weak output gets one OpenAI-prioritised retry.
@@ -148,17 +157,21 @@ def translate_and_summarize(
             )
             retry_lines = [line.strip() for line in retry_raw.splitlines() if line.strip()]
             retry_title = finnish_title
+            retry_title_echo_detected = title_echo_detected
             retry_bullets: list[str] = []
             for line in retry_lines:
                 if line.upper().startswith("HEADLINE:"):
                     extracted = line[len("HEADLINE:"):].strip()
                     if extracted:
-                        retry_title = extracted
+                        if _is_title_echo(extracted, title):
+                            retry_title_echo_detected = True
+                        else:
+                            retry_title = extracted
                 elif line.startswith(("-", "•", "*", "–")):
                     bullet = line.lstrip("-•*– ").strip()
                     if len(bullet) > 10:
                         retry_bullets.append(bullet)
-            if retry_bullets:
+            if retry_bullets and not retry_title_echo_detected:
                 return retry_title, {"bullets": retry_bullets[:5], "source": "llm"}
 
         # LLM responded but we couldn't parse bullets — fall back to deterministic

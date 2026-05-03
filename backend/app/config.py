@@ -227,6 +227,13 @@ CLASSIFIER_TONE_MIN_CONFIDENCE: float = float(
 # When enabled, topic weights are adjusted based on swipe history.
 ADAPTIVE_SCORING_ENABLED: bool = os.getenv("ADAPTIVE_SCORING_ENABLED", "false").lower() == "true"
 
+# Scoring logic version gate.
+# v1 = heuristic baseline (no adaptive topic weighting)
+# v2 = baseline + adaptive topic weighting from swipe history
+SCORING_VERSION: str = os.getenv("SCORING_VERSION", "v1").strip().lower()
+if SCORING_VERSION not in {"v1", "v2"}:
+    SCORING_VERSION = "v1"
+
 # Minimum swipe count per topic before adaptive adjustment kicks in.
 ADAPTIVE_MIN_SWIPES: int = int(os.getenv("ADAPTIVE_MIN_SWIPES", "5"))
 
@@ -258,3 +265,14 @@ LOW_TIER_MIN_CONTENT_LENGTH: int = int(os.getenv("LOW_TIER_MIN_CONTENT_LENGTH", 
 
 # Minimum content length for all other sources (existing threshold).
 MIN_CONTENT_LENGTH: int = int(os.getenv("MIN_CONTENT_LENGTH", "150"))
+
+# Paywall score thresholds for tri-state classification.
+# score >= PAYWALL_SCORE_PAYWALLED_THRESHOLD -> paywalled
+# score <= PAYWALL_SCORE_FREE_THRESHOLD      -> free
+# otherwise                                  -> uncertain
+PAYWALL_SCORE_PAYWALLED_THRESHOLD: float = float(
+    os.getenv("PAYWALL_SCORE_PAYWALLED_THRESHOLD", "0.70")
+)
+PAYWALL_SCORE_FREE_THRESHOLD: float = float(
+    os.getenv("PAYWALL_SCORE_FREE_THRESHOLD", "0.30")
+)

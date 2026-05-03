@@ -30,6 +30,52 @@ Onboarding → Daily briefing → Swipe feedback → History → Preferences
 - **Scoring:** heuristic no-BS model with user feedback loop
 - **Web:** React + Vite (secondary, dev/demo use)
 
+## LLM provider order and local fallback policy
+
+Current provider order in code:
+
+1. OpenAI (primary)
+2. OpenAI-compatible fallback endpoint (for example Groq)
+3. Gemini
+4. Local Ollama endpoint (optional, last resort through OpenAI-compatible fallback slot)
+
+Design decision:
+
+- Ollama is supported as a local emergency fallback, not a default provider.
+- Activation requires observability data and benchmark acceptance criteria (see below).
+- Provider integration path is already enabled by the existing provider interface and fallback client design in backend app services llm.py.
+
+Timeout budget guidance:
+
+- Remote providers: keep timeouts around 10s class latency for interactive briefing UX.
+- Local Ollama: allow a higher budget (up to ~30s) only as last resort.
+
+Latency envelope decision:
+
+- If local p95 latency exceeds 25s per call, Ollama should not be enabled for normal briefing traffic.
+
+Suggested Ollama models for local testing:
+
+- mistral
+- llama3.1:8b
+
+## Ollama activation benchmark criteria
+
+Before enabling Ollama in normal usage, team should verify all criteria below using observability endpoints:
+
+| Criterion | Acceptance threshold | How to measure |
+|---|---|---|
+| Parse success rate | >= 80% | validate_llm_response acceptance rate |
+| p95 latency | <= 25s per call | provider latency stats from admin metrics |
+| Hallucination rejection rate | < 20% | validator rejection ratio |
+| Fallback frequency | Ollama max 40% of LLM calls | provider-level call counters |
+| Test data size | >= 100 articles | controlled benchmark run |
+
+Prerequisites before activation:
+
+- Ingest and LLM observability counters are available via admin endpoints.
+- Team has reviewed benchmark results and explicitly accepted thresholds.
+
 ## What the backend does
 
 - Fetches RSS feeds from Finnish + international sources
@@ -103,6 +149,23 @@ python3.10 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Copy `.env.example` to `.env` and add your `OPENAI_API_KEY` to enable LLM summarization. Without it the app falls back to deterministic summaries.
 
+Local LLM (Ollama) setup (optional, last-resort fallback):
+
+```bash
+ollama serve
+ollama pull mistral
+```
+
+Then set in backend `.env`:
+
+```bash
+FALLBACK_LLM_API_KEY=ollama
+FALLBACK_LLM_BASE_URL=http://localhost:11434/v1
+FALLBACK_LLM_MODEL=mistral
+```
+
+Important: FALLBACK_LLM_API_KEY must be non-empty. Use value ollama as placeholder for local endpoint mode.
+
 Optional env vars:
 - `LOG_LEVEL` — logging verbosity: `DEBUG`, `INFO` (default), `WARNING`
 - `CORS_ALLOW_ORIGINS` — comma-separated extra origins beyond the defaults
@@ -153,3 +216,5 @@ Open `http://127.0.0.1:5173`.
 | POST | `/api/admin/reenrich` | Re-score all articles in background |
 | POST | `/api/admin/resummarize` | Reset and regenerate all summaries |
 | GET | `/api/admin/reenrich/status` | Background job status |
+| GET | `/api/admin/llm-stats` | Per-provider LLM metrics |
+| GET | `/api/admin/ingest-stats` | Latest ingest-run counters |

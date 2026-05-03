@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Query
 
+from ..config import SCORING_VERSION
 from ..database import (
     get_preferences,
     get_swipe_history,
@@ -19,6 +20,7 @@ log = logging.getLogger(__name__)
 @router.get("/metrics", response_model=MetricsResponse)
 def get_metrics(limit: int = Query(default=10, ge=1, le=20)) -> MetricsResponse:
     result = top_feedback_metrics(limit)
+    result["scoring_version"] = SCORING_VERSION
     return MetricsResponse(**result)
 
 
