@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query
 
 from ..config import LOCAL_CITIES
 from ..database import (
+    count_articles,
     get_preferences,
     random_briefing,
     top_briefing,
@@ -30,7 +31,7 @@ def _scope_to_regions(prefs: dict) -> list[str] | None:
     return regions if regions else None
 
 
-def rows_to_briefing(rows) -> BriefingResponse:
+def rows_to_briefing(rows, empty_reason: str | None = None) -> BriefingResponse:
     stories: list[ArticleBrief] = []
     for row in rows:
         summary = json.loads(row["summary_json"]) if row["summary_json"] else {"bullets": []}
@@ -63,21 +64,57 @@ def rows_to_briefing(rows) -> BriefingResponse:
                 tone_reason=row["tone_reason"] if "tone_reason" in row.keys() else None,
             )
         )
-    return BriefingResponse(generated_at=datetime.utcnow(), total=len(stories), stories=stories)
+    return BriefingResponse(
+        generated_at=datetime.utcnow(),
+        total=len(stories),
+        stories=stories,
+        empty_reason=empty_reason,
+    )
 
 
 @router.get("/briefing", response_model=BriefingResponse)
 def get_briefing(limit: int = Query(default=10, ge=1, le=50)) -> BriefingResponse:
     prefs = get_preferences()
+    scope_regions = _scope_to_regions(prefs)
+    hide_paywall = prefs.get("hide_paywall", True)
+    excluded_sources = prefs.get("excluded_sources") or None
+    tone_filter = prefs.get("tone_filter", "all")
+
     rows = top_briefing(
         limit,
-        region_filters=_scope_to_regions(prefs),
-        hide_paywall=prefs.get("hide_paywall", True),
-        excluded_sources=prefs.get("excluded_sources") or None,
-        tone_filter=prefs.get("tone_filter", "all"),
+        region_filters=scope_regions,
+        hide_paywall=hide_paywall,
+        excluded_sources=excluded_sources,
+        tone_filter=tone_filter,
     )
+
+    empty_reason: str | None = None
+    if not rows:
+        all_total = count_articles().get("total", 0)
+        if all_total == 0:
+            empty_reason = "no_data"
+        else:
+            in_scope_total = count_articles(
+                region_filters=scope_regions,
+                hide_paywall=False,
+                excluded_sources=None,
+            ).get("total", 0)
+            if in_scope_total == 0:
+                empty_reason = "no_scope_match"
+            elif hide_paywall:
+                open_total = count_articles(
+                    region_filters=scope_regions,
+                    hide_paywall=True,
+                    excluded_sources=excluded_sources,
+                    tone_filters=[tone_filter] if tone_filter != "all" else None,
+                ).get("total", 0)
+                if open_total == 0:
+                    empty_reason = "only_paywalled"
+            if empty_reason is None:
+                empty_reason = "no_filter_match"
+
     log.info("GET /api/briefing limit=%d → %d stories", limit, len(rows))
-    return rows_to_briefing(rows)
+    return rows_to_briefing(rows, empty_reason=empty_reason)
 
 
 @router.get("/briefing/random", response_model=BriefingResponse)

@@ -34,6 +34,15 @@ LLM_MAX_RPS_OPENAI: float = float(os.getenv("LLM_MAX_RPS_OPENAI", "1.0"))
 LLM_MAX_RPS_FALLBACK: float = float(os.getenv("LLM_MAX_RPS_FALLBACK", "2.0"))
 LLM_MAX_RPS_GEMINI: float = float(os.getenv("LLM_MAX_RPS_GEMINI", "2.0"))
 
+# LLM settings — Ollama (local, no API key needed)
+# Set OLLAMA_BASE_URL to enable (default: http://localhost:11434/v1)
+# Set OLLAMA_MODEL to choose the model (default: llama3.2)
+# Set OLLAMA_ENABLED=false to disable even if running
+OLLAMA_ENABLED: bool = os.getenv("OLLAMA_ENABLED", "true").lower() not in ("false", "0", "no")
+OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.2")
+LLM_MAX_RPS_OLLAMA: float = float(os.getenv("LLM_MAX_RPS_OLLAMA", "2.0"))
+
 # Pre-filter gate for LLM translation/summarization in ingest pipeline.
 TRANSLATION_SCORE_THRESHOLD: float = float(os.getenv("TRANSLATION_SCORE_THRESHOLD", "0.0"))
 
@@ -42,10 +51,12 @@ TRANSLATION_SCORE_THRESHOLD: float = float(os.getenv("TRANSLATION_SCORE_THRESHOL
 #   PROVIDER_TIMEOUT_OPENAI_SECONDS
 #   PROVIDER_TIMEOUT_FALLBACK_SECONDS
 #   PROVIDER_TIMEOUT_GEMINI_SECONDS
+#   PROVIDER_TIMEOUT_OLLAMA_SECONDS
 PROVIDER_TIMEOUT_SECONDS: dict[str, float] = {
     "openai": float(os.getenv("PROVIDER_TIMEOUT_OPENAI_SECONDS", "10")),
     "fallback": float(os.getenv("PROVIDER_TIMEOUT_FALLBACK_SECONDS", "8")),
     "gemini": float(os.getenv("PROVIDER_TIMEOUT_GEMINI_SECONDS", "12")),
+    "ollama": float(os.getenv("PROVIDER_TIMEOUT_OLLAMA_SECONDS", "30")),
 }
 
 # Skip provider if P95 latency exceeds this threshold (milliseconds)
@@ -234,7 +245,7 @@ ADAPTIVE_SCORING_ENABLED: bool = os.getenv("ADAPTIVE_SCORING_ENABLED", "true").l
 # Scoring logic version gate.
 # v1 = heuristic baseline (no adaptive topic weighting)
 # v2 = baseline + adaptive topic weighting from swipe history
-SCORING_VERSION: str = os.getenv("SCORING_VERSION", "v1").strip().lower()
+SCORING_VERSION: str = os.getenv("SCORING_VERSION", "v2").strip().lower()
 if SCORING_VERSION not in {"v1", "v2"}:
     SCORING_VERSION = "v1"
 
@@ -315,6 +326,9 @@ OBSERVABILITY_PAYWALL_FP_THRESHOLD: float = float(
 )
 OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD: float = float(
     os.getenv("OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD", "0.50")
+)
+OBSERVABILITY_LLM_REJECTION_THRESHOLD: float = float(
+    os.getenv("OBSERVABILITY_LLM_REJECTION_THRESHOLD", "0.20")
 )
 
 # Dwell time thresholds for swipe signal strength weighting.

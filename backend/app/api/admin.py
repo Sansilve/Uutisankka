@@ -78,8 +78,14 @@ def llm_stats() -> dict[str, dict[str, int | float]]:
 
 @router.get("/ingest-stats")
 def ingest_stats() -> dict:
-    from ..config import OBSERVABILITY_PAYWALL_FP_THRESHOLD, OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD
+    from ..config import (
+        OBSERVABILITY_LLM_REJECTION_THRESHOLD,
+        OBSERVABILITY_PAYWALL_FP_THRESHOLD,
+        OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD,
+    )
+
     stats = get_last_ingest_stats()
+    llm_stats = get_llm_stats()
     alerts: list[str] = []
     total = stats.get("translated_llm", 0) + stats.get("translated_heuristic", 0) + stats.get("paywall_detected", 0)
     if total > 0:
@@ -91,6 +97,24 @@ def ingest_stats() -> dict:
         if llm_total > 0:
             fallback_rate = stats.get("translated_heuristic", 0) / llm_total
             if fallback_rate > OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD:
-                alerts.append(f"Translation heuristic fallback rate high ({fallback_rate:.0%} > {OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD:.0%})")
+                alerts.append(f"Translation LLM fallback rate high ({fallback_rate:.0%} > {OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD:.0%})")
                 log.warning("ALERT: translation_fallback_rate=%.2f exceeds threshold=%.2f", fallback_rate, OBSERVABILITY_TRANSLATION_FALLBACK_THRESHOLD)
+
+    llm_calls = 0
+    llm_rejections = 0
+    for provider_stats in llm_stats.values():
+        llm_calls += int(provider_stats.get("calls", 0))
+        llm_rejections += int(provider_stats.get("validation_rejections", 0))
+
+    if llm_calls > 0:
+        llm_rejection_rate = llm_rejections / llm_calls
+        if llm_rejection_rate > OBSERVABILITY_LLM_REJECTION_THRESHOLD:
+            alerts.append(
+                f"LLM validation rejection rate high ({llm_rejection_rate:.0%} > {OBSERVABILITY_LLM_REJECTION_THRESHOLD:.0%})"
+            )
+            log.warning(
+                "ALERT: llm_rejection_rate=%.2f exceeds threshold=%.2f",
+                llm_rejection_rate,
+                OBSERVABILITY_LLM_REJECTION_THRESHOLD,
+            )
     return {**stats, "alerts": alerts}

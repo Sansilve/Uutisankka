@@ -35,12 +35,14 @@ export default function useSessionUiState() {
   }
 
   function setErrorStatus(error) {
-    const message = error?.message || 'Tuntematon virhe'
+    const detail = error?.message ? ` (${error.message})` : ''
+    const message = `Uutisia ei voitu ladata. Tarkista yhteys.${detail}`
     setStatusMsg(`Virhe: ${message}`)
   }
 
   function markFatalError(error) {
-    const message = error?.message || 'Tuntematon virhe'
+    const detail = error?.message ? ` (${error.message})` : ''
+    const message = `Uutisia ei voitu ladata. Tarkista yhteys.${detail}`
     setFatalError(message)
   }
 

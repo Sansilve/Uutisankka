@@ -264,7 +264,10 @@ export default function AllNewsScreen({ onClose }) {
         setTotal(data.total ?? null)
         setItems((prev) => reset ? newItems : [...prev, ...newItems])
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        const detail = e?.message ? ` (${e.message})` : ''
+        setError(`Uutisia ei voitu ladata. Tarkista yhteys.${detail}`)
+      })
       .finally(() => { setLoading(false); setLoadingMore(false) })
   }, [includePaywall, scopeKey, cityKey, categoryKey, sourceKey, toneFilter])
 
