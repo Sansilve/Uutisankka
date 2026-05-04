@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import {
   ActivityIndicator,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -34,8 +35,9 @@ import {
 const DAILY_LIMIT = 8
 
 function Masthead({ metricsText, onOpenSettings, onOpenHistory, onOpenAllNews, onOpenFilter }) {
+  const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 0
   return (
-    <View style={styles.masthead}>
+    <View style={[styles.masthead, { paddingTop: statusBarHeight + 10 }]}>
       <View style={styles.mastheadTop}>
         <Text style={styles.mastheadName}>🦆 UutisAnkka</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -550,7 +552,6 @@ const styles = StyleSheet.create({
   // Masthead
   masthead: {
     paddingHorizontal: 18,
-    paddingTop: 10,
     paddingBottom: 0,
     backgroundColor: '#ffffff',
   },
@@ -591,13 +592,17 @@ const styles = StyleSheet.create({
   settingsButton: {
     borderWidth: 1.5,
     borderColor: '#d1d5db',
-    borderRadius: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   settingsButtonText: {
     color: '#1a1a1a',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
 
