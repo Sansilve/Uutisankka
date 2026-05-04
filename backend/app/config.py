@@ -337,3 +337,15 @@ OBSERVABILITY_LLM_REJECTION_THRESHOLD: float = float(
 # Override via env variables below.
 DWELL_STRONG_MS: int = int(os.getenv("DWELL_STRONG_MS", "8000"))
 DWELL_WEAK_MS: int = int(os.getenv("DWELL_WEAK_MS", "2000"))
+
+# ---------------------------------------------------------------------------
+# Source trust & bias scoring (Sprint W10)
+# ---------------------------------------------------------------------------
+# Score penalty applied when a source has LOW / VERY LOW / FAKE NEWS factual rating.
+# Applied in scoring.py when trust_filter is enabled (default).
+# Override via env: TRUST_SCORE_PENALTY (negative float)
+TRUST_SCORE_PENALTY: float = float(os.getenv("TRUST_SCORE_PENALTY", "-3.0"))
+
+# Default state of the trust filter — can be overridden per user via preferences.
+# When False, no penalty is applied regardless of user setting.
+TRUST_FILTER_ENABLED: bool = os.getenv("TRUST_FILTER_ENABLED", "true").lower() not in ("false", "0", "no")

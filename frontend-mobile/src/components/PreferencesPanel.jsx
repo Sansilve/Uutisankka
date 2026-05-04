@@ -86,6 +86,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
   const [scope, setScope]         = useState(new Set(preferences.news_scope || ['suomi', 'maailma']))
   const [city, setCity]           = useState(preferences.local_city || '')
   const [hidePaywall, setHidePaywall] = useState(preferences.hide_paywall !== false)
+  const [trustFilterEnabled, setTrustFilterEnabled] = useState(preferences.trust_filter_enabled !== false)
   const [excludedSources, setExcludedSources] = useState(new Set(preferences.excluded_sources || []))
   const [toneFilter, setToneFilter] = useState(preferences.tone_filter || 'all')
   const [saving, setSaving]       = useState(false)
@@ -177,6 +178,7 @@ export default function PreferencesPanel({ preferences, onSaved }) {
         news_scope: [...scope],
         local_city: city,
         hide_paywall: hidePaywall,
+        trust_filter_enabled: trustFilterEnabled,
         excluded_sources: [...excludedSources],
         tone_filter: toneFilter,
       })
@@ -305,6 +307,20 @@ export default function PreferencesPanel({ preferences, onSaved }) {
           </View>
           <View style={[styles.toggleSwitch, hidePaywall && styles.toggleSwitchOn]}>
             <View style={[styles.toggleThumb, hidePaywall && styles.toggleThumbOn]} />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.toggleRow}
+          onPress={() => { setTrustFilterEnabled((v) => !v); setUnsaved(true) }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.toggleInfo}>
+            <Text style={styles.toggleLabel}>Suosi luotettavia lähteitä</Text>
+            <Text style={styles.toggleDesc}>Heikosti luokiteltujen lähteiden artikkeleita lasketaan alaspäin</Text>
+          </View>
+          <View style={[styles.toggleSwitch, trustFilterEnabled && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleThumb, trustFilterEnabled && styles.toggleThumbOn]} />
           </View>
         </TouchableOpacity>
 

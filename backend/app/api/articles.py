@@ -115,6 +115,10 @@ def get_all_articles(
                 category=row["category"],
                 category_secondary=row["category_secondary"],
                 tone=row["tone"],
+                trust_score=row["trust_score"] if "trust_score" in row.keys() else None,
+                bias_score=row["bias_score"] if "bias_score" in row.keys() else None,
+                factual_rating=row["factual_rating"] if "factual_rating" in row.keys() else None,
+                fact_check_status=row["fact_check_status"] if "fact_check_status" in row.keys() else "unknown",
             )
         )
     log.info("GET /api/articles limit=%d include_paywall=%s → %d items", limit, include_paywall, len(items))

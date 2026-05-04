@@ -1,0 +1,417 @@
+{
+  "_meta": {
+    "description": "Source trust and bias registry for Uutisankka. Based on MediaBiasFactCheck (MBFC) data.",
+    "bias_scale": "7-point: -3 EXTREME-LEFT, -2 LEFT, -1 LEFT-CENTER, 0 CENTER, +1 RIGHT-CENTER, +2 RIGHT, +3 EXTREME-RIGHT",
+    "factual_ratings": ["VERY HIGH", "HIGH", "MOSTLY FACTUAL", "MIXED", "LOW", "VERY LOW", "FAKE NEWS"],
+    "trust_score": "0-100 derived from factual_rating",
+    "source": "MediaBiasFactCheck.com (community data, drmikecrowe/mbfc-browser-extension)",
+    "updated": "2026-05"
+  },
+  "sources": {
+    "yle.fi": {
+      "name": "Yle Uutiset",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "VERY HIGH",
+      "trust_score": 95,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/yle"
+    },
+    "hs.fi": {
+      "name": "Helsingin Sanomat",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 85,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/helsingin-sanomat"
+    },
+    "iltalehti.fi": {
+      "name": "Iltalehti",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/iltalehti"
+    },
+    "is.fi": {
+      "name": "Ilta-Sanomat",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/ilta-sanomat"
+    },
+    "kauppalehti.fi": {
+      "name": "Kauppalehti",
+      "bias_score": 1,
+      "bias_label": "RIGHT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 85,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/kauppalehti"
+    },
+    "talouselama.fi": {
+      "name": "Talouselämä",
+      "bias_score": 1,
+      "bias_label": "RIGHT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 82,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "verkkouutiset.fi": {
+      "name": "Verkkouutiset",
+      "bias_score": 2,
+      "bias_label": "RIGHT",
+      "factual_rating": "MIXED",
+      "trust_score": 45,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/verkkouutiset"
+    },
+    "uusisuomi.fi": {
+      "name": "Uusi Suomi",
+      "bias_score": 2,
+      "bias_label": "RIGHT",
+      "factual_rating": "MIXED",
+      "trust_score": 45,
+      "country": "FI",
+      "mbfc_url": "https://mediabiasfactcheck.com/uusi-suomi"
+    },
+    "maaseuduntulevaisuus.fi": {
+      "name": "Maaseudun Tulevaisuus",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 80,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "aamulehti.fi": {
+      "name": "Aamulehti",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 80,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "mikrobitti.fi": {
+      "name": "Mikrobitti",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 80,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "tekniikkatalous.fi": {
+      "name": "Tekniikka&Talous",
+      "bias_score": 1,
+      "bias_label": "RIGHT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 80,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "ksml.fi": {
+      "name": "Keskisuomalainen",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 80,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "savonsanomat.fi": {
+      "name": "Savon Sanomat",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "kaleva.fi": {
+      "name": "Kaleva",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "hameensanomat.fi": {
+      "name": "Hämeensanomat",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "esaimaa.fi": {
+      "name": "Etelä-Saimaa",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "finlandtoday.fi": {
+      "name": "Finland Today",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "helsinkitimes.fi": {
+      "name": "Helsinki Times",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "ku.fi": {
+      "name": "Karjalainen",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "aamuposti.fi": {
+      "name": "Aamuposti",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "satakunnankansa.fi": {
+      "name": "Satakunnan Kansa",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "uusimaa.fi": {
+      "name": "Uusimaa",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "sss.fi": {
+      "name": "Salon Seudun Sanomat",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "FI",
+      "mbfc_url": null
+    },
+    "bbc.co.uk": {
+      "name": "BBC News",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 90,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/bbc"
+    },
+    "nytimes.com": {
+      "name": "The New York Times",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 88,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/new-york-times"
+    },
+    "theguardian.com": {
+      "name": "The Guardian",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 87,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/the-guardian"
+    },
+    "aljazeera.com": {
+      "name": "Al Jazeera",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 72,
+      "country": "QA",
+      "mbfc_url": "https://mediabiasfactcheck.com/al-jazeera-english"
+    },
+    "france24.com": {
+      "name": "France 24",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 85,
+      "country": "FR",
+      "mbfc_url": "https://mediabiasfactcheck.com/france-24"
+    },
+    "skynews.com": {
+      "name": "Sky News",
+      "bias_score": 1,
+      "bias_label": "RIGHT-CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/sky-news"
+    },
+    "rfi.fr": {
+      "name": "RFI",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 82,
+      "country": "FR",
+      "mbfc_url": "https://mediabiasfactcheck.com/rfi"
+    },
+    "upi.com": {
+      "name": "UPI",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 85,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/upi"
+    },
+    "dw.com": {
+      "name": "Deutsche Welle",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 88,
+      "country": "DE",
+      "mbfc_url": "https://mediabiasfactcheck.com/dw"
+    },
+    "euronews.com": {
+      "name": "Euronews",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "FR",
+      "mbfc_url": "https://mediabiasfactcheck.com/euronews"
+    },
+    "npr.org": {
+      "name": "NPR",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 90,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/npr"
+    },
+    "cnn.com": {
+      "name": "CNN",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/cnn"
+    },
+    "time.com": {
+      "name": "TIME",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 85,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/time-magazine"
+    },
+    "latimes.com": {
+      "name": "Los Angeles Times",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 85,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/los-angeles-times"
+    },
+    "independent.co.uk": {
+      "name": "The Independent",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/the-independent"
+    },
+    "ft.com": {
+      "name": "Financial Times",
+      "bias_score": 1,
+      "bias_label": "RIGHT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 90,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/financial-times"
+    },
+    "globalnews.ca": {
+      "name": "Global News",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 72,
+      "country": "CA",
+      "mbfc_url": "https://mediabiasfactcheck.com/global-news"
+    },
+    "reuters.com": {
+      "name": "Reuters",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "VERY HIGH",
+      "trust_score": 98,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/reuters"
+    },
+    "businesswire.com": {
+      "name": "Business Wire",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MIXED",
+      "trust_score": 40,
+      "country": "US",
+      "mbfc_url": null
+    },
+    "prnewswire.com": {
+      "name": "PR Newswire",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MIXED",
+      "trust_score": 35,
+      "country": "US",
+      "mbfc_url": null
+    },
+    "globenewswire.com": {
+      "name": "Globe Newswire",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MIXED",
+      "trust_score": 35,
+      "country": "US",
+      "mbfc_url": null
+    }
+  }
+}

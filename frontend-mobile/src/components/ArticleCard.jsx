@@ -149,6 +149,28 @@ function getToneLabel(tone) {
   }
 }
 
+function getTrustDotColor(factualRating) {
+  if (!factualRating) return '#6b7280'
+  const r = factualRating.toUpperCase()
+  if (r === 'VERY HIGH' || r === 'HIGH') return '#16a34a'
+  if (r === 'MOSTLY FACTUAL' || r === 'MIXED') return '#ca8a04'
+  if (r === 'LOW' || r === 'VERY LOW' || r === 'FAKE NEWS') return '#dc2626'
+  return '#6b7280'
+}
+
+function getTrustLabel(factualRating) {
+  if (!factualRating) return 'Lähde tuntematon'
+  const r = factualRating.toUpperCase()
+  if (r === 'VERY HIGH') return 'Erittäin luotettava lähde'
+  if (r === 'HIGH') return 'Luotettava lähde'
+  if (r === 'MOSTLY FACTUAL') return 'Pääosin luotettava lähde'
+  if (r === 'MIXED') return 'Vaihteleva luotettavuus'
+  if (r === 'LOW') return 'Heikko luotettavuus'
+  if (r === 'VERY LOW') return 'Erittäin heikko luotettavuus'
+  if (r === 'FAKE NEWS') return 'Fake news -lähde'
+  return 'Lähde tuntematon'
+}
+
 export default function ArticleCard({
   story,
   onDecision,
@@ -307,7 +329,13 @@ export default function ArticleCard({
 
           <View style={styles.titleRule} />
 
-          <Text style={styles.sourceText}>📰 {cleanSource(story.source)}</Text>
+          <View style={styles.sourceRow}>
+            <View
+              style={[styles.trustDot, { backgroundColor: getTrustDotColor(story.factual_rating) }]}
+              accessibilityLabel={getTrustLabel(story.factual_rating)}
+            />
+            <Text style={styles.sourceText}>📰 {cleanSource(story.source)}</Text>
+          </View>
 
           <Text style={[styles.lead, isCompact && styles.leadCompact]}>{lead}</Text>
 
@@ -564,8 +592,18 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 11,
     fontWeight: '500',
-    marginBottom: 12,
     letterSpacing: 0.3,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 6,
+  },
+  trustDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   lead: {
     color: '#1a1a1a',

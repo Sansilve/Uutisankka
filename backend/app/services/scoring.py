@@ -21,6 +21,8 @@ from ..config import (
     MAJOR_SOURCES,
     SCORING_VERSION,
     TOPIC_WEIGHTS,
+    TRUST_FILTER_ENABLED,
+    TRUST_SCORE_PENALTY,
 )
 
 # Keys match the chip IDs in the frontend exactly.
@@ -183,6 +185,8 @@ def score_article(
     category: str | None = None,
     category_secondary: str | None = None,
     paywall_status: str | None = None,
+    factual_rating: str | None = None,
+    trust_filter_enabled: bool = True,
 ) -> tuple[float, list[str], list[dict[str, float | str]]]:
     combined = f"{title} {content}".lower()
     topics = detect_topics(combined)
@@ -299,6 +303,12 @@ def score_article(
         from ..config import UNCERTAIN_PAYWALL_SCORE_PENALTY
         score += UNCERTAIN_PAYWALL_SCORE_PENALTY
         breakdown.append({"reason": "Paywall uncertain", "points": UNCERTAIN_PAYWALL_SCORE_PENALTY, "category": "quality"})
+
+    if factual_rating and trust_filter_enabled and TRUST_FILTER_ENABLED:
+        from .trust import LOW_TRUST_RATINGS
+        if factual_rating in LOW_TRUST_RATINGS:
+            score += TRUST_SCORE_PENALTY
+            breakdown.append({"reason": f"Low-trust source ({factual_rating})", "points": TRUST_SCORE_PENALTY, "category": "quality"})
 
     return round(score, 2), topics, breakdown
 
