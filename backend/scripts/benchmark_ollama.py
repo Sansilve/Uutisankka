@@ -18,6 +18,11 @@ import json
 # Allow running from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+# Force Ollama-only mode: clear cloud API keys so llm.py skips OpenAI/Gemini entirely
+os.environ.pop("OPENAI_API_KEY", None)
+os.environ.pop("FALLBACK_LLM_API_KEY", None)
+os.environ.pop("GEMINI_API_KEY", None)
+
 from backend.app.database import _conn
 from backend.app.services.ingest import summarize_article, translate_and_summarize, is_english_url
 
