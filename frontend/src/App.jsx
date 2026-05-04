@@ -15,6 +15,7 @@ import {
 } from './api'
 import ToneDashboard from './components/ToneDashboard'
 import ObservabilityPanel from './components/ObservabilityPanel'
+import TrustBiasDashboard from './components/TrustBiasDashboard'
 import './App.css'
 
 // ── Topic & source config (mirrored from mobile) ──────────────────────────────
@@ -848,6 +849,7 @@ export default function App() {
       {activeTab === 'admin' && (
         <section style={{ padding: '20px' }}>
           <h2>📊 Admin Dashboards</h2>
+          <TrustBiasDashboard metrics={metrics} />
           <ToneDashboard metrics={metrics} />
           <ObservabilityPanel metrics={metrics} />
         </section>

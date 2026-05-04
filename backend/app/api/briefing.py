@@ -62,6 +62,10 @@ def rows_to_briefing(rows, empty_reason: str | None = None) -> BriefingResponse:
                 tone=row["tone"] if "tone" in row.keys() else None,
                 tone_confidence=row["tone_confidence"] if "tone_confidence" in row.keys() else None,
                 tone_reason=row["tone_reason"] if "tone_reason" in row.keys() else None,
+                trust_score=row["trust_score"] if "trust_score" in row.keys() else None,
+                bias_score=row["bias_score"] if "bias_score" in row.keys() else None,
+                factual_rating=row["factual_rating"] if "factual_rating" in row.keys() else None,
+                fact_check_status=row["fact_check_status"] if "fact_check_status" in row.keys() else "unknown",
             )
         )
     return BriefingResponse(

@@ -35,6 +35,7 @@ from .scoring import score_article
 from .summarizer import _deterministic_summarize, summarize_article
 from .translator import is_english_url, translate_and_summarize, translate_title
 from .classifier import classify_article
+from .trust import get_source_trust
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -238,6 +239,7 @@ def enrich_unprocessed_articles() -> int:
                     source, len(content), min_len,
                 )
                 filtered_source_quality += 1
+                _trust = get_source_trust(row.get("url", "") or source)
                 pre_base_score, pre_topics, pre_breakdown_items = score_article(
                     title=row["title"], content=content, source=source,
                     published_at=row["published_at"], preferences=preferences,
@@ -246,6 +248,8 @@ def enrich_unprocessed_articles() -> int:
                     category_swipe_stats=category_swipe_stats,
                     category=_row_value(row, "category"),
                     category_secondary=_row_value(row, "category_secondary"),
+                    factual_rating=_trust.factual_rating,
+                    trust_filter_enabled=bool(preferences.get("trust_filter_enabled", True)),
                 )
                 feedback_score = get_article_feedback_score(row["id"])
                 total_score = round(pre_base_score + feedback_score, 2)
@@ -254,11 +258,15 @@ def enrich_unprocessed_articles() -> int:
                 update_article_enrichment(
                     row["id"], pre_base_score, total_score, pre_topics, summary,
                     {"items": pre_breakdown_items}, translated_title=None,
+                    trust_score=_trust.trust_score,
+                    bias_score=_trust.bias_score,
+                    factual_rating=_trust.factual_rating,
                 )
                 count += 1
                 continue
 
 
+        _trust = get_source_trust(row.get("url", "") or source)
         pre_base_score, pre_topics, pre_breakdown_items = score_article(
             title=row["title"],
             content=content,
@@ -270,6 +278,8 @@ def enrich_unprocessed_articles() -> int:
             category_swipe_stats=category_swipe_stats,
             category=_row_value(row, "category"),
             category_secondary=_row_value(row, "category_secondary"),
+            factual_rating=_trust.factual_rating,
+            trust_filter_enabled=bool(preferences.get("trust_filter_enabled", True)),
         )
 
         below_threshold = pre_base_score < TRANSLATION_SCORE_THRESHOLD
@@ -340,6 +350,8 @@ def enrich_unprocessed_articles() -> int:
                 category=classification.primary,
                 category_secondary=classification.secondary,
                 paywall_status=paywall_status,
+                factual_rating=_trust.factual_rating,
+                trust_filter_enabled=bool(preferences.get("trust_filter_enabled", True)),
             )
 
         total_score = round(base_score + feedback_score, 2)
@@ -353,6 +365,9 @@ def enrich_unprocessed_articles() -> int:
             tone=classification.tone if classification else None,
             tone_confidence=classification.tone_confidence if classification else None,
             tone_reason=classification.tone_reason if classification else None,
+            trust_score=_trust.trust_score,
+            bias_score=_trust.bias_score,
+            factual_rating=_trust.factual_rating,
         )
         count += 1
 

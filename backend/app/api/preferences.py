@@ -37,6 +37,7 @@ def update_preferences(
         hide_paywall=payload.hide_paywall,
         excluded_sources=payload.excluded_sources,
         tone_filter=payload.tone_filter,
+        trust_filter_enabled=payload.trust_filter_enabled,
     )
     new_prefs = get_preferences()
     changed_topics = _diff_topics(old_prefs, new_prefs)

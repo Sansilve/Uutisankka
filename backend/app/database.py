@@ -93,11 +93,16 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "tone", "TEXT DEFAULT NULL")
             _ensure_column(conn, "articles", "tone_confidence", "REAL DEFAULT NULL")
             _ensure_column(conn, "articles", "tone_reason", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "trust_score", "REAL DEFAULT NULL")
+            _ensure_column(conn, "articles", "bias_score", "INTEGER DEFAULT NULL")
+            _ensure_column(conn, "articles", "factual_rating", "TEXT DEFAULT NULL")
+            _ensure_column(conn, "articles", "fact_check_status", "TEXT DEFAULT 'unknown'")
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 1")
             _ensure_column(conn, "user_preferences", "excluded_sources", "TEXT NOT NULL DEFAULT '[]'")
             _ensure_column(conn, "user_preferences", "tone_filter", "TEXT NOT NULL DEFAULT 'all'")
+            _ensure_column(conn, "user_preferences", "trust_filter_enabled", "INTEGER NOT NULL DEFAULT 1")
             _ensure_column(conn, "swipe_history", "dwell_ms", "INTEGER DEFAULT NULL")
             conn.commit()
         finally:
@@ -119,6 +124,7 @@ def upsert_preferences(
     excluded_sources: list[str] | None = None,
     tone_filter: str = "all",
     only_if_missing: bool = False,
+    trust_filter_enabled: bool = True,
 ) -> None:
     with _db_lock:
         conn = _conn()
@@ -138,18 +144,18 @@ def upsert_preferences(
                 conn.execute(
                     """
                     UPDATE user_preferences
-                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, excluded_sources = ?, tone_filter = ?, updated_at = ?
+                    SET interests = ?, disliked_topics = ?, news_scope = ?, local_city = ?, hide_paywall = ?, excluded_sources = ?, tone_filter = ?, trust_filter_enabled = ?, updated_at = ?
                     WHERE user_id = 1
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), tf, timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), tf, int(trust_filter_enabled), timestamp),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, tone_filter, updated_at)
-                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO user_preferences (user_id, interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, tone_filter, trust_filter_enabled, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), tf, timestamp),
+                    (json.dumps(interests), json.dumps(disliked_topics), json.dumps(scope), local_city, int(hide_paywall), json.dumps(sources), tf, int(trust_filter_enabled), timestamp),
                 )
             conn.commit()
         finally:
@@ -160,7 +166,7 @@ def get_preferences() -> dict:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, tone_filter FROM user_preferences WHERE user_id = 1"
+            "SELECT interests, disliked_topics, news_scope, local_city, hide_paywall, excluded_sources, tone_filter, trust_filter_enabled FROM user_preferences WHERE user_id = 1"
         ).fetchone()
         if not row:
             return {
@@ -171,6 +177,7 @@ def get_preferences() -> dict:
                 "hide_paywall": True,
                 "excluded_sources": [],
                 "tone_filter": "all",
+                "trust_filter_enabled": True,
             }
         return {
             "interests": json.loads(row["interests"]),
@@ -180,6 +187,7 @@ def get_preferences() -> dict:
             "hide_paywall": bool(row["hide_paywall"]),
             "excluded_sources": json.loads(row["excluded_sources"] or '[]'),
             "tone_filter": row["tone_filter"] or "all",
+            "trust_filter_enabled": bool(row["trust_filter_enabled"] if row["trust_filter_enabled"] is not None else 1),
         }
     finally:
         conn.close()
@@ -212,6 +220,8 @@ def random_briefing(limit: int = 10, region_filters: list[str] | None = None, hi
                 a.score, a.base_score, a.feedback_score,
                 a.topics, a.summary_json, a.score_breakdown_json,
                 a.is_paywall,
+                a.trust_score, a.bias_score, a.factual_rating,
+                COALESCE(a.fact_check_status, 'unknown') AS fact_check_status,
                 COALESCE(f.positive_count, 0) AS feedback_positive,
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
@@ -300,7 +310,7 @@ def fetch_unenriched(limit: int = 200) -> list[sqlite3.Row]:
         ).fetchall()
         return rows
     finally:
-        conn.close()
+            return rows
 
 
 def fetch_untranslated_english(urls: list[str]) -> list[sqlite3.Row]:
@@ -551,6 +561,9 @@ def update_article_enrichment(
     tone: str | None = None,
     tone_confidence: float | None = None,
     tone_reason: str | None = None,
+    trust_score: float | None = None,
+    bias_score: int | None = None,
+    factual_rating: str | None = None,
 ) -> None:
     status = summary.get("paywall_status")
     is_paywall_from_summary = 1 if (summary.get("source") == "no_content" or status == "paywalled") else 0
@@ -566,7 +579,8 @@ def update_article_enrichment(
                     SET title = ?, base_score = ?, score = ?, topics = ?,
                         summary_json = ?, score_breakdown_json = ?, is_paywall = ?,
                         category = ?, category_secondary = ?,
-                        tone = ?, tone_confidence = ?, tone_reason = ?
+                        tone = ?, tone_confidence = ?, tone_reason = ?,
+                        trust_score = ?, bias_score = ?, factual_rating = ?
                     WHERE id = ?
                     """,
                     (
@@ -582,6 +596,9 @@ def update_article_enrichment(
                         tone,
                         tone_confidence,
                         tone_reason,
+                        trust_score,
+                        bias_score,
+                        factual_rating,
                         article_id,
                     ),
                 )
@@ -592,7 +609,8 @@ def update_article_enrichment(
                     SET base_score = ?, score = ?, topics = ?, summary_json = ?,
                         score_breakdown_json = ?, is_paywall = ?,
                         category = ?, category_secondary = ?,
-                        tone = ?, tone_confidence = ?, tone_reason = ?
+                        tone = ?, tone_confidence = ?, tone_reason = ?,
+                        trust_score = ?, bias_score = ?, factual_rating = ?
                     WHERE id = ?
                     """,
                     (
@@ -607,6 +625,9 @@ def update_article_enrichment(
                         tone,
                         tone_confidence,
                         tone_reason,
+                        trust_score,
+                        bias_score,
+                        factual_rating,
                         article_id,
                     ),
                 )
@@ -771,6 +792,10 @@ def top_briefing(limit: int = 10, region_filters: list[str] | None = None, hide_
                 a.tone,
                 a.tone_confidence,
                 a.tone_reason,
+                a.trust_score,
+                a.bias_score,
+                a.factual_rating,
+                COALESCE(a.fact_check_status, 'unknown') AS fact_check_status,
                 COALESCE(f.positive_count, 0) AS feedback_positive,
                 COALESCE(f.negative_count, 0) AS feedback_negative
             FROM articles a
@@ -960,7 +985,11 @@ def list_articles(
                     a.score,
                     a.category,
                     a.category_secondary,
-                    a.tone
+                    a.tone,
+                    a.trust_score,
+                    a.bias_score,
+                    a.factual_rating,
+                    COALESCE(a.fact_check_status, 'unknown') AS fact_check_status
                 FROM articles a
                 WHERE 1=1
                   {where_region}
@@ -995,7 +1024,11 @@ def list_articles(
                     a.score,
                     a.category,
                     a.category_secondary,
-                    a.tone
+                    a.tone,
+                    a.trust_score,
+                    a.bias_score,
+                    a.factual_rating,
+                    COALESCE(a.fact_check_status, 'unknown') AS fact_check_status
                 FROM articles a
                 WHERE 1=1
                   {where_region}
@@ -1187,10 +1220,74 @@ def top_feedback_metrics(limit: int = 10) -> dict[str, float | int | None]:
         total_negative = sum(int(row["negative_count"]) for row in rows)
         total_votes = total_positive + total_negative
         ratio = round(total_positive / total_votes, 3) if total_votes else None
+
+        # Trust / bias statistics across all articles
+        trust_rows = conn.execute(
+            """
+            SELECT
+                factual_rating,
+                COUNT(*) AS n,
+                AVG(trust_score) AS avg_trust,
+                AVG(bias_score)  AS avg_bias
+            FROM articles
+            WHERE factual_rating IS NOT NULL
+            GROUP BY factual_rating
+            ORDER BY n DESC
+            """
+        ).fetchall()
+
+        tone_rows = conn.execute(
+            """
+            SELECT tone, COUNT(*) AS n, AVG(tone_confidence) AS avg_conf
+            FROM articles
+            WHERE tone IS NOT NULL
+            GROUP BY tone
+            """
+        ).fetchall()
+
+        trust_stats = {
+            row["factual_rating"]: {
+                "count": row["n"],
+                "avg_trust": round(row["avg_trust"], 1) if row["avg_trust"] is not None else None,
+            }
+            for row in trust_rows
+        }
+
+        bias_counts = conn.execute(
+            """
+            SELECT bias_score, COUNT(*) AS n
+            FROM articles
+            WHERE bias_score IS NOT NULL
+            GROUP BY bias_score
+            ORDER BY bias_score
+            """
+        ).fetchall()
+
+        tone_stats = {
+            row["tone"]: {
+                "count": row["n"],
+                "avg_confidence": round(row["avg_conf"], 3) if row["avg_conf"] is not None else None,
+            }
+            for row in tone_rows
+        }
+        # Flatten for backwards compat (ToneDashboard reads positive_count etc.)
+        tone_stats["positive_count"] = tone_stats.get("positive", {}).get("count", 0)
+        tone_stats["neutral_count"]  = tone_stats.get("neutral",  {}).get("count", 0)
+        tone_stats["negative_count"] = tone_stats.get("negative", {}).get("count", 0)
+        avg_conf_vals = [
+            v["avg_confidence"]
+            for v in tone_stats.values()
+            if isinstance(v, dict) and v.get("avg_confidence") is not None
+        ]
+        tone_stats["avg_confidence"] = round(sum(avg_conf_vals) / len(avg_conf_vals), 3) if avg_conf_vals else None
+
         return {
             "top_limit": limit,
             "total_feedback_votes": total_votes,
             "positive_feedback_ratio": ratio,
+            "trust_stats": trust_stats,
+            "bias_distribution": [{"bias_score": r["bias_score"], "count": r["n"]} for r in bias_counts],
+            "tone_stats": tone_stats,
         }
     finally:
         conn.close()

@@ -12,6 +12,7 @@ class PreferenceProfile(BaseModel):
     hide_paywall: bool = False
     excluded_sources: List[str] = Field(default_factory=list)
     tone_filter: str = "all"
+    trust_filter_enabled: bool = True
 
 
 class PreferenceUpdate(BaseModel):
@@ -22,6 +23,7 @@ class PreferenceUpdate(BaseModel):
     hide_paywall: bool = False
     excluded_sources: List[str] = Field(default_factory=list)
     tone_filter: str = "all"
+    trust_filter_enabled: bool = True
 
 
 class SummaryPayload(BaseModel):
@@ -58,6 +60,10 @@ class ArticleBrief(BaseModel):
     tone: str | None = None
     tone_confidence: float | None = None
     tone_reason: str | None = None
+    trust_score: float | None = None
+    bias_score: int | None = None
+    factual_rating: str | None = None
+    fact_check_status: str = "unknown"
 
 
 class IngestResponse(BaseModel):
@@ -92,7 +98,10 @@ class MetricsResponse(BaseModel):
     top_limit: int
     total_feedback_votes: int
     positive_feedback_ratio: float | None
-    scoring_version: str
+    scoring_version: str = ""
+    trust_stats: dict = {}
+    bias_distribution: list = []
+    tone_stats: dict = {}
 
 
 class SwipeHistoryItem(BaseModel):
@@ -127,6 +136,10 @@ class AllNewsItem(BaseModel):
     category: str | None = None
     category_secondary: str | None = None
     tone: str | None = None
+    trust_score: float | None = None
+    bias_score: int | None = None
+    factual_rating: str | None = None
+    fact_check_status: str = "unknown"
 
 
 class AllNewsResponse(BaseModel):
