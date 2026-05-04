@@ -98,7 +98,10 @@ class MetricsResponse(BaseModel):
     top_limit: int
     total_feedback_votes: int
     positive_feedback_ratio: float | None
-    scoring_version: str
+    scoring_version: str = ""
+    trust_stats: dict = {}
+    bias_distribution: list = []
+    tone_stats: dict = {}
 
 
 class SwipeHistoryItem(BaseModel):

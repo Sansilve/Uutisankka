@@ -1220,10 +1220,74 @@ def top_feedback_metrics(limit: int = 10) -> dict[str, float | int | None]:
         total_negative = sum(int(row["negative_count"]) for row in rows)
         total_votes = total_positive + total_negative
         ratio = round(total_positive / total_votes, 3) if total_votes else None
+
+        # Trust / bias statistics across all articles
+        trust_rows = conn.execute(
+            """
+            SELECT
+                factual_rating,
+                COUNT(*) AS n,
+                AVG(trust_score) AS avg_trust,
+                AVG(bias_score)  AS avg_bias
+            FROM articles
+            WHERE factual_rating IS NOT NULL
+            GROUP BY factual_rating
+            ORDER BY n DESC
+            """
+        ).fetchall()
+
+        tone_rows = conn.execute(
+            """
+            SELECT tone, COUNT(*) AS n, AVG(tone_confidence) AS avg_conf
+            FROM articles
+            WHERE tone IS NOT NULL
+            GROUP BY tone
+            """
+        ).fetchall()
+
+        trust_stats = {
+            row["factual_rating"]: {
+                "count": row["n"],
+                "avg_trust": round(row["avg_trust"], 1) if row["avg_trust"] is not None else None,
+            }
+            for row in trust_rows
+        }
+
+        bias_counts = conn.execute(
+            """
+            SELECT bias_score, COUNT(*) AS n
+            FROM articles
+            WHERE bias_score IS NOT NULL
+            GROUP BY bias_score
+            ORDER BY bias_score
+            """
+        ).fetchall()
+
+        tone_stats = {
+            row["tone"]: {
+                "count": row["n"],
+                "avg_confidence": round(row["avg_conf"], 3) if row["avg_conf"] is not None else None,
+            }
+            for row in tone_rows
+        }
+        # Flatten for backwards compat (ToneDashboard reads positive_count etc.)
+        tone_stats["positive_count"] = tone_stats.get("positive", {}).get("count", 0)
+        tone_stats["neutral_count"]  = tone_stats.get("neutral",  {}).get("count", 0)
+        tone_stats["negative_count"] = tone_stats.get("negative", {}).get("count", 0)
+        avg_conf_vals = [
+            v["avg_confidence"]
+            for v in tone_stats.values()
+            if isinstance(v, dict) and v.get("avg_confidence") is not None
+        ]
+        tone_stats["avg_confidence"] = round(sum(avg_conf_vals) / len(avg_conf_vals), 3) if avg_conf_vals else None
+
         return {
             "top_limit": limit,
             "total_feedback_votes": total_votes,
             "positive_feedback_ratio": ratio,
+            "trust_stats": trust_stats,
+            "bias_distribution": [{"bias_score": r["bias_score"], "count": r["n"]} for r in bias_counts],
+            "tone_stats": tone_stats,
         }
     finally:
         conn.close()

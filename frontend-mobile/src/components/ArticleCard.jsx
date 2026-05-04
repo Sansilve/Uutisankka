@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native'
 import ShareButton from './ShareButton'
+import SourceTrustModal from './SourceTrustModal'
 
 // Dark, muted newspaper-style topic colors
 const TOPIC_COLORS = {
@@ -184,6 +185,7 @@ export default function ArticleCard({
   const cardWidth = Math.min(width - (isCompact ? 16 : 32), 760)
   const swipeThreshold = width * 0.24
   const [expanded, setExpanded] = useState(false)
+  const [trustModalVisible, setTrustModalVisible] = useState(false)
   const pan = useRef(new Animated.ValueXY()).current
   const cardVisibleAt = useRef(Date.now())
 
@@ -330,12 +332,24 @@ export default function ArticleCard({
           <View style={styles.titleRule} />
 
           <View style={styles.sourceRow}>
-            <View
-              style={[styles.trustDot, { backgroundColor: getTrustDotColor(story.factual_rating) }]}
-              accessibilityLabel={getTrustLabel(story.factual_rating)}
-            />
-            <Text style={styles.sourceText}>📰 {cleanSource(story.source)}</Text>
+            <TouchableOpacity
+              onPress={() => setTrustModalVisible(true)}
+              style={styles.trustTouchable}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[styles.trustDot, { backgroundColor: getTrustDotColor(story.factual_rating) }]}
+              />
+              <Text style={styles.sourceText}>📰 {cleanSource(story.source)}</Text>
+              <Text style={styles.trustTap}>ⓘ</Text>
+            </TouchableOpacity>
           </View>
+
+          <SourceTrustModal
+            visible={trustModalVisible}
+            onClose={() => setTrustModalVisible(false)}
+            story={story}
+          />
 
           <Text style={[styles.lead, isCompact && styles.leadCompact]}>{lead}</Text>
 
@@ -598,7 +612,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  trustTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
+  },
+  trustTap: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginLeft: 2,
   },
   trustDot: {
     width: 8,
