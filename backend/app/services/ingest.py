@@ -41,6 +41,69 @@ from .trust import get_source_trust
 TAG_RE = re.compile(r"<[^>]+>")
 log = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Noise / paywall pre-processing
+# ---------------------------------------------------------------------------
+
+# Phrases that indicate paywall-injected content (stripped before LLM)
+_PAYWALL_PHRASES: list[str] = [
+    "subscribe to read", "subscribe to continue", "subscription required",
+    "tilaajille", "vain tilaajille", "tilaa jatkaaksesi", "jatka lukemista tilaamalla",
+    "unlock this article", "become a subscriber", "to read the full article",
+    "this content is available to subscribers",
+    "create a free account", "sign in to read",
+    "register to read", "log in to read more",
+    "läs hela artikeln", "läs mer med",  # Swedish paywall text
+]
+
+# Boilerplate patterns that crawlers often pick up
+_NOISE_PATTERNS: list[re.Pattern] = [
+    re.compile(r"(accept|hyväksy|godkänn).{0,60}(cookie|eväste)", re.I),
+    re.compile(r"(cookie|eväste).{0,60}(policy|käytäntö|asetus)", re.I),
+    re.compile(r"javascript (must be|on) (enabled|päällä)", re.I),
+    re.compile(r"(share|jaa|dela)\s+(this|tämä|detta)\s+(article|artikkeli|artikel)", re.I),
+    re.compile(r"(follow us|seuraa meitä).{0,40}(twitter|instagram|facebook|tiktok)", re.I),
+    re.compile(r"©\s*\d{4}", re.I),  # copyright lines
+    re.compile(r"\[[\+\-]?\d+\]"),  # citation markers [1] [+3]
+]
+
+
+def _strip_noise(text: str) -> str:
+    """Remove paywall notices and common boilerplate from article content before LLM."""
+    if not text:
+        return text
+    # Split into sentences / lines and filter per-line
+    lines = re.split(r"(?<=[.!?])\s+|\n", text)
+    cleaned: list[str] = []
+    for line in lines:
+        line_lower = line.lower()
+        if any(phrase in line_lower for phrase in _PAYWALL_PHRASES):
+            continue
+        if any(pat.search(line) for pat in _NOISE_PATTERNS):
+            continue
+        if len(line.strip()) < 12:  # skip very short fragments
+            continue
+        cleaned.append(line)
+    result = " ".join(cleaned)
+    return re.sub(r"\s{2,}", " ", result).strip()
+
+
+# ---------------------------------------------------------------------------
+# Language detection helper
+# ---------------------------------------------------------------------------
+
+def _is_english_text(text: str) -> bool:
+    """Return True if text is detected as English with high confidence."""
+    if not text or len(text) < 30:
+        return False
+    try:
+        from langdetect import detect, DetectorFactory
+        DetectorFactory.seed = 42  # deterministic
+        lang = detect(text[:800])
+        return lang == "en"
+    except Exception:
+        return False
+
 
 _ingest_stats_lock = Lock()
 _DEFAULT_INGEST_STATS: dict[str, int] = {
@@ -282,6 +345,9 @@ def enrich_unprocessed_articles() -> int:
             trust_filter_enabled=bool(preferences.get("trust_filter_enabled", True)),
         )
 
+        # Pre-processing: strip paywall notices and boilerplate noise before LLM
+        content_clean = _strip_noise(content)
+
         below_threshold = pre_base_score < TRANSLATION_SCORE_THRESHOLD
         score_title = row["title"]
         base_score = pre_base_score
@@ -292,15 +358,15 @@ def enrich_unprocessed_articles() -> int:
             filtered_below_threshold += 1
             stats["filtered_below_threshold"] += 1
             finnish_title = None
-            summary = _deterministic_summarize(row["title"], content)
+            summary = _deterministic_summarize(row["title"], content_clean)
         else:
             llm_routed += 1
             if is_english_url(url):
                 # One LLM call: translate title to Finnish + produce Finnish bullets
-                finnish_title, summary = translate_and_summarize(row["title"], content)
+                finnish_title, summary = translate_and_summarize(row["title"], content_clean)
             else:
                 finnish_title = None
-                summary = summarize_article(row["title"], content, row["source"])
+                summary = summarize_article(row["title"], content_clean, row["source"])
 
             # Score using translated title when available for better Finnish keyword matching.
             score_title = finnish_title or row["title"]
@@ -356,6 +422,12 @@ def enrich_unprocessed_articles() -> int:
 
         total_score = round(base_score + feedback_score, 2)
 
+        # Post-processing: detect if title is still in English after LLM pipeline
+        effective_title = finnish_title or row["title"]
+        lang_detected = "en" if _is_english_text(effective_title) else "fi"
+        if lang_detected == "en":
+            log.debug("enrich: article %d title still in English after pipeline: '%s'", row["id"], effective_title)
+
         update_article_enrichment(
             row["id"], base_score, total_score, topics, summary,
             {"items": breakdown_items},
@@ -368,6 +440,7 @@ def enrich_unprocessed_articles() -> int:
             trust_score=_trust.trust_score,
             bias_score=_trust.bias_score,
             factual_rating=_trust.factual_rating,
+            lang_detected=lang_detected,
         )
         count += 1
 
