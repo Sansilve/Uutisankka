@@ -5,10 +5,13 @@ Primary path  : OpenAI chat completion → 3–5 Finnish bullet points.
 Fallback path : Deterministic heuristic summarizer (no API key required).
 """
 
+import logging
 import re
 from collections import Counter
 
-from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
+from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OLLAMA_ENABLED, OPENAI_API_KEY
+
+log = logging.getLogger(__name__)
 from .llm import LLMUnavailable, chat_with_fallback, validate_llm_response
 from .paywall import assess_paywall
 
@@ -73,7 +76,7 @@ def _dedup_bullets(bullets: list[str]) -> list[str]:
 
 
 def _llm_summarize(title: str, content: str) -> dict[str, list[str]] | None:
-    if not (OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY):
+    if not (OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY or OLLAMA_ENABLED):
         return None
 
     user_text = f"Otsikko: {title}\n\nSisältö: {content[:2500]}"

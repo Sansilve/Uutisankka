@@ -9,7 +9,7 @@ This avoids two separate API calls (translate + summarize) per article.
 import logging
 import re
 
-from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, TRANSLATION_TARGET_LANG, TRANSLATION_TARGET_LANG_NAME
+from ..config import FALLBACK_LLM_API_KEY, GEMINI_API_KEY, OLLAMA_ENABLED, OPENAI_API_KEY, TRANSLATION_TARGET_LANG, TRANSLATION_TARGET_LANG_NAME
 from .llm import LLMUnavailable, chat_with_fallback, validate_llm_response
 
 log = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def is_english_url(url: str) -> bool:
     return any(domain in url_lower for domain in ENGLISH_DOMAINS)
 
 
-_LLM_AVAILABLE = bool(OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY)
+_LLM_AVAILABLE = bool(OPENAI_API_KEY or FALLBACK_LLM_API_KEY or GEMINI_API_KEY or OLLAMA_ENABLED)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +83,28 @@ _SYSTEM_PROMPT = _build_system_prompt()
 def _is_title_echo(candidate: str, original_title: str) -> bool:
     """Return True when LLM headline is effectively unchanged from source title."""
     return candidate.strip().casefold() == original_title.strip().casefold()
+
+
+def _translate_title_only(title: str, target_lang_name: str = TRANSLATION_TARGET_LANG_NAME) -> str:
+    """Minimal single-turn call to translate just the title. Returns original on failure."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"Translate the following news headline to {target_lang_name}. "
+                f"Reply with ONLY the translated headline — no explanation, no punctuation changes, max 120 characters."
+            ),
+        },
+        {"role": "user", "content": title},
+    ]
+    try:
+        translated = chat_with_fallback(messages, max_tokens=60, temperature=0.2)
+        translated = translated.strip().strip('"').strip("'")
+        if translated and not _is_title_echo(translated, title) and len(translated) > 5:
+            return translated
+    except LLMUnavailable:
+        pass
+    return title
 
 
 def translate_and_summarize(
@@ -139,7 +161,11 @@ def translate_and_summarize(
                 if len(bullet) > 10:
                     bullets.append(bullet)
 
-        if len(bullets) >= 3 and not title_echo_detected:
+        # Return if we got bullets — even if title echo, keep bullets (title stays original)
+        if len(bullets) >= 3:
+            # If title was not translated in the main call, try a cheap targeted call
+            if finnish_title == title:
+                finnish_title = _translate_title_only(title)
             return finnish_title, {"bullets": bullets[:5], "source": "llm"}
 
         # Premium retry: weak output gets one OpenAI-prioritised retry.
@@ -157,21 +183,19 @@ def translate_and_summarize(
             )
             retry_lines = [line.strip() for line in retry_raw.splitlines() if line.strip()]
             retry_title = finnish_title
-            retry_title_echo_detected = title_echo_detected
             retry_bullets: list[str] = []
             for line in retry_lines:
                 if line.upper().startswith("HEADLINE:"):
                     extracted = line[len("HEADLINE:"):].strip()
-                    if extracted:
-                        if _is_title_echo(extracted, title):
-                            retry_title_echo_detected = True
-                        else:
-                            retry_title = extracted
+                    if extracted and not _is_title_echo(extracted, title):
+                        retry_title = extracted
                 elif line.startswith(("-", "•", "*", "–")):
                     bullet = line.lstrip("-•*– ").strip()
                     if len(bullet) > 10:
                         retry_bullets.append(bullet)
-            if retry_bullets and not retry_title_echo_detected:
+            if retry_bullets:
+                if retry_title == title:
+                    retry_title = _translate_title_only(title)
                 return retry_title, {"bullets": retry_bullets[:5], "source": "llm"}
 
         # LLM responded but we couldn't parse bullets — fall back to deterministic

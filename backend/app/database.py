@@ -97,6 +97,7 @@ def init_db() -> None:
             _ensure_column(conn, "articles", "bias_score", "INTEGER DEFAULT NULL")
             _ensure_column(conn, "articles", "factual_rating", "TEXT DEFAULT NULL")
             _ensure_column(conn, "articles", "fact_check_status", "TEXT DEFAULT 'unknown'")
+            _ensure_column(conn, "articles", "lang_detected", "TEXT DEFAULT NULL")
             _ensure_column(conn, "user_preferences", "news_scope", "TEXT NOT NULL DEFAULT '[\"suomi\",\"maailma\"]'")
             _ensure_column(conn, "user_preferences", "local_city", "TEXT NOT NULL DEFAULT ''")
             _ensure_column(conn, "user_preferences", "hide_paywall", "INTEGER NOT NULL DEFAULT 1")
@@ -564,6 +565,7 @@ def update_article_enrichment(
     trust_score: float | None = None,
     bias_score: int | None = None,
     factual_rating: str | None = None,
+    lang_detected: str | None = None,
 ) -> None:
     status = summary.get("paywall_status")
     is_paywall_from_summary = 1 if (summary.get("source") == "no_content" or status == "paywalled") else 0
@@ -580,7 +582,8 @@ def update_article_enrichment(
                         summary_json = ?, score_breakdown_json = ?, is_paywall = ?,
                         category = ?, category_secondary = ?,
                         tone = ?, tone_confidence = ?, tone_reason = ?,
-                        trust_score = ?, bias_score = ?, factual_rating = ?
+                        trust_score = ?, bias_score = ?, factual_rating = ?,
+                        lang_detected = ?
                     WHERE id = ?
                     """,
                     (
@@ -599,6 +602,7 @@ def update_article_enrichment(
                         trust_score,
                         bias_score,
                         factual_rating,
+                        lang_detected,
                         article_id,
                     ),
                 )
@@ -610,7 +614,8 @@ def update_article_enrichment(
                         score_breakdown_json = ?, is_paywall = ?,
                         category = ?, category_secondary = ?,
                         tone = ?, tone_confidence = ?, tone_reason = ?,
-                        trust_score = ?, bias_score = ?, factual_rating = ?
+                        trust_score = ?, bias_score = ?, factual_rating = ?,
+                        lang_detected = ?
                     WHERE id = ?
                     """,
                     (
@@ -628,6 +633,7 @@ def update_article_enrichment(
                         trust_score,
                         bias_score,
                         factual_rating,
+                        lang_detected,
                         article_id,
                     ),
                 )
