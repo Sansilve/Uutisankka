@@ -85,6 +85,28 @@ def _is_title_echo(candidate: str, original_title: str) -> bool:
     return candidate.strip().casefold() == original_title.strip().casefold()
 
 
+def _translate_title_only(title: str, target_lang_name: str = TRANSLATION_TARGET_LANG_NAME) -> str:
+    """Minimal single-turn call to translate just the title. Returns original on failure."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"Translate the following news headline to {target_lang_name}. "
+                f"Reply with ONLY the translated headline — no explanation, no punctuation changes, max 120 characters."
+            ),
+        },
+        {"role": "user", "content": title},
+    ]
+    try:
+        translated = chat_with_fallback(messages, max_tokens=60, temperature=0.2)
+        translated = translated.strip().strip('"').strip("'")
+        if translated and not _is_title_echo(translated, title) and len(translated) > 5:
+            return translated
+    except LLMUnavailable:
+        pass
+    return title
+
+
 def translate_and_summarize(
     title: str, content: str
 ) -> tuple[str, dict[str, list[str] | str]]:
@@ -141,6 +163,9 @@ def translate_and_summarize(
 
         # Return if we got bullets — even if title echo, keep bullets (title stays original)
         if len(bullets) >= 3:
+            # If title was not translated in the main call, try a cheap targeted call
+            if finnish_title == title:
+                finnish_title = _translate_title_only(title)
             return finnish_title, {"bullets": bullets[:5], "source": "llm"}
 
         # Premium retry: weak output gets one OpenAI-prioritised retry.
@@ -169,6 +194,8 @@ def translate_and_summarize(
                     if len(bullet) > 10:
                         retry_bullets.append(bullet)
             if retry_bullets:
+                if retry_title == title:
+                    retry_title = _translate_title_only(title)
                 return retry_title, {"bullets": retry_bullets[:5], "source": "llm"}
 
         # LLM responded but we couldn't parse bullets — fall back to deterministic
