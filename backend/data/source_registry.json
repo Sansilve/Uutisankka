@@ -233,6 +233,42 @@
       "country": "GB",
       "mbfc_url": "https://mediabiasfactcheck.com/bbc"
     },
+    "bbc.com": {
+      "name": "BBC News",
+      "bias_score": -1,
+      "bias_label": "LEFT-CENTER",
+      "factual_rating": "HIGH",
+      "trust_score": 90,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/bbc"
+    },
+    "news.sky.com": {
+      "name": "Sky News",
+      "bias_score": 1,
+      "bias_label": "RIGHT-CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 70,
+      "country": "GB",
+      "mbfc_url": "https://mediabiasfactcheck.com/sky-news"
+    },
+    "fool.com": {
+      "name": "The Motley Fool",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 65,
+      "country": "US",
+      "mbfc_url": "https://mediabiasfactcheck.com/the-motley-fool"
+    },
+    "lendingtree.com": {
+      "name": "LendingTree",
+      "bias_score": 0,
+      "bias_label": "CENTER",
+      "factual_rating": "MOSTLY FACTUAL",
+      "trust_score": 60,
+      "country": "US",
+      "mbfc_url": ""
+    },
     "nytimes.com": {
       "name": "The New York Times",
       "bias_score": -1,
