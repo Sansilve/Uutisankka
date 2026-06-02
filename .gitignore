@@ -14,6 +14,10 @@ env/
 
 # SQLite database (local data, not committed)
 backend/news.db
+backend/app/news.db
+
+# Windows/Git Bash artifact files
+NUL
 
 # Environment
 .env

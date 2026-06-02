@@ -21,6 +21,10 @@ export function fetchBriefing(limit = 10) {
   return request(`/api/briefing?limit=${limit}`)
 }
 
+export function fetchRandomBriefing(limit = 10) {
+  return request(`/api/briefing/random?limit=${limit}`)
+}
+
 export function triggerIngest() {
   return request('/api/ingest', { method: 'POST' })
 }
@@ -45,4 +49,22 @@ export function sendFeedback(payload) {
 
 export function fetchMetrics(limit = 10) {
   return request(`/api/metrics?limit=${limit}`)
+}
+
+export function triggerReenrich() {
+  return request('/api/admin/reenrich', { method: 'POST' })
+}
+
+export function fetchReenrichStatus() {
+  return request('/api/admin/reenrich/status')
+}
+
+export function fetchHistory(limit = 200) {
+  return request(`/api/history?limit=${limit}`)
+}
+export function fetchArticles(limit = 50, includePaywall = true, offset = 0) {
+  return request(`/api/articles?limit=${limit}&offset=${offset}&include_paywall=${includePaywall}`)
+}
+export function fetchArticleStats() {
+  return request('/api/articles/stats')
 }

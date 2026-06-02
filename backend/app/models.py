@@ -5,13 +5,25 @@ from pydantic import BaseModel, Field
 
 
 class PreferenceProfile(BaseModel):
-    interests: List[str] = Field(default_factory=lambda: ["technology", "politics", "economy"])
-    disliked_topics: List[str] = Field(default_factory=lambda: ["celebrity", "entertainment"])
+    interests: List[str] = Field(default_factory=lambda: ["politiikka", "teknologia", "talous"])
+    disliked_topics: List[str] = Field(default_factory=list)
+    news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
+    local_city: str = ""
+    hide_paywall: bool = False
+    excluded_sources: List[str] = Field(default_factory=list)
+    tone_filter: str = "all"
+    trust_filter_enabled: bool = True
 
 
 class PreferenceUpdate(BaseModel):
     interests: List[str]
     disliked_topics: List[str]
+    news_scope: List[str] = Field(default_factory=lambda: ["suomi", "maailma"])
+    local_city: str = ""
+    hide_paywall: bool = False
+    excluded_sources: List[str] = Field(default_factory=list)
+    tone_filter: str = "all"
+    trust_filter_enabled: bool = True
 
 
 class SummaryPayload(BaseModel):
@@ -21,6 +33,7 @@ class SummaryPayload(BaseModel):
 class ScoreBreakdownItem(BaseModel):
     reason: str
     points: float
+    category: str = ""
 
 
 class ScoreBreakdownPayload(BaseModel):
@@ -41,6 +54,16 @@ class ArticleBrief(BaseModel):
     topics: List[str]
     summary: SummaryPayload
     score_breakdown: ScoreBreakdownPayload
+    is_paywall: bool = False
+    category: str | None = None
+    category_secondary: str | None = None
+    tone: str | None = None
+    tone_confidence: float | None = None
+    tone_reason: str | None = None
+    trust_score: float | None = None
+    bias_score: int | None = None
+    factual_rating: str | None = None
+    fact_check_status: str = "unknown"
 
 
 class IngestResponse(BaseModel):
@@ -54,11 +77,13 @@ class BriefingResponse(BaseModel):
     generated_at: datetime
     total: int
     stories: List[ArticleBrief]
+    empty_reason: str | None = None
 
 
 class FeedbackPayload(BaseModel):
     article_id: int
     is_relevant: bool
+    dwell_ms: int | None = None
 
 
 class FeedbackResponse(BaseModel):
@@ -73,3 +98,50 @@ class MetricsResponse(BaseModel):
     top_limit: int
     total_feedback_votes: int
     positive_feedback_ratio: float | None
+    scoring_version: str = ""
+    trust_stats: dict = {}
+    bias_distribution: list = []
+    tone_stats: dict = {}
+
+
+class SwipeHistoryItem(BaseModel):
+    swipe_id: int
+    is_relevant: bool
+    swiped_at: datetime
+    id: int
+    title: str
+    source: str
+    published_at: datetime | None
+    url: str
+    topics: List[str]
+    summary: SummaryPayload
+
+
+class HistoryResponse(BaseModel):
+    total: int
+    items: List[SwipeHistoryItem]
+
+
+class AllNewsItem(BaseModel):
+    id: int
+    title: str
+    source: str
+    region: str
+    published_at: datetime | None
+    url: str
+    topics: List[str]
+    summary: SummaryPayload
+    is_paywall: bool = False
+    score: float = 0.0
+    category: str | None = None
+    category_secondary: str | None = None
+    tone: str | None = None
+    trust_score: float | None = None
+    bias_score: int | None = None
+    factual_rating: str | None = None
+    fact_check_status: str = "unknown"
+
+
+class AllNewsResponse(BaseModel):
+    total: int
+    items: List[AllNewsItem]
